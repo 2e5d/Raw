@@ -1,13 +1,14 @@
 --[[
-    GEMINI ESP LIBRARY - LEGACY EDITION
-    Restored: Classic Box, Segmented Health, and Scanline Fill
+    GEMINI ESP LIBRARY - CLASSIC EDITION
+    Features: Classic Box, Vertical Health Bar, Skeleton, and Chams.
+    Optimized for Fluid Menu Integration.
 ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
--- 1. PRE-RUN CLEANUP
+-- 1. PRE-RUN CLEANUP (Prevents duplicate drawings if re-executed)
 if _G.ESP_Cleanup then _G.ESP_Cleanup() end
 
 -- 2. SETTINGS CONFIG
@@ -32,23 +33,19 @@ _G.ESPLibrary = {
         ShowSkeleton = true,
         SkeletonThickness = 1.2,
         
-        -- HEALTH BAR (RESTORED)
+        -- HEALTH BAR
         ShowHealth = true,
         HealthBarWidth = 2,
         HealthBarOffset = 5,
         
-        -- BOX & FILL (RESTORED OLD STYLE)
+        -- BOX STYLE
         BoxThickness = 1.5,
-        FillEnabled = true,
-        FillDensity = 25,
-        FillTransparency = 0.3,
         
         -- TRACERS
         ShowTracer = true,
         TracerOrigin = "Bottom",
         
         -- COLORS
-        MainColor = Color3.fromRGB(255, 255, 255),
         HealthHigh = Color3.fromRGB(0, 255, 150),
         HealthLow = Color3.fromRGB(255, 50, 50),
     }
@@ -65,10 +62,9 @@ local function CreateESP(player)
     local obj = {
         Player = player,
         Drawings = {},
-        BoxLines = {}, -- Top, Bottom, Left, Right
-        FillLines = {},
+        BoxLines = {}, 
         Skeleton = {},
-        HealthBar = {},
+        Tracers = {},
         Highlight = nil
     }
 
@@ -79,19 +75,19 @@ local function CreateESP(player)
         return d
     end
 
-    -- Name Text
+    -- Visual Elements
     obj.Name = NewDraw("Text", {Center = true, Outline = true, ZIndex = 10})
-
-    -- Box Lines (Classic 4-line box)
+    
+    -- Box (Top, Right, Bottom, Left)
     for i = 1, 4 do table.insert(obj.BoxLines, NewDraw("Line", {Thickness = 1.5, ZIndex = 5})) end
 
-    -- Health Bar (Background + Foreground)
+    -- Health Bar
     obj.HealthBg = NewDraw("Line", {Thickness = 3, Color = Color3.new(0,0,0), Transparency = 0.5, ZIndex = 1})
     obj.HealthMain = NewDraw("Line", {Thickness = 2, ZIndex = 2})
 
-    -- Skeleton & Fill
+    -- Skeleton & Tracers
     for i = 1, 15 do table.insert(obj.Skeleton, NewDraw("Line", {Thickness = 1, ZIndex = 4})) end
-    for i = 1, _G.ESPLibrary.Settings.FillDensity do table.insert(obj.FillLines, NewDraw("Line", {ZIndex = 0})) end
+    for i = 1, 10 do table.insert(obj.Tracers, NewDraw("Line", {Thickness = 1, ZIndex = 1})) end
 
     local hl = Instance.new("Highlight")
     hl.Name = "ESP_Highlight"
@@ -101,7 +97,7 @@ local function CreateESP(player)
     ESPTable[player] = obj
 end
 
--- 4. CLEANUP
+-- 4. CLEANUP (Fixes Join/Leave issues)
 local function RemoveESP(player)
     local obj = ESPTable[player]
     if obj then
@@ -111,7 +107,7 @@ local function RemoveESP(player)
     end
 end
 
--- 5. RIG RESOLVER
+-- 5. RIG RESOLVER (Supports R6 and R15)
 local function GetJoints(char)
     local isR15 = char:FindFirstChild("UpperTorso") ~= nil
     if isR15 then
@@ -136,7 +132,7 @@ local function GetJoints(char)
     end
 end
 
--- 6. RENDERER
+-- 6. MAIN RENDERER
 local function Update()
     local s = _G.ESPLibrary.Settings
     if not s.Enabled then
@@ -174,7 +170,7 @@ local function Update()
                     obj.Name.Size = s.NameSize
                 end
 
-                -- Classic Box
+                -- Box
                 obj.BoxLines[1].From = tl; obj.BoxLines[1].To = tr
                 obj.BoxLines[2].From = tr; obj.BoxLines[2].To = br
                 obj.BoxLines[3].From = br; obj.BoxLines[3].To = bl
@@ -185,12 +181,12 @@ local function Update()
                 obj.HealthBg.Visible = s.ShowHealth
                 obj.HealthMain.Visible = s.ShowHealth
                 if s.ShowHealth then
-                    local hp = hum.Health / hum.MaxHealth
+                    local hpPercent = hum.Health / hum.MaxHealth
                     local barPos = tl - Vector2.new(s.HealthBarOffset, 0)
                     obj.HealthBg.From = barPos; obj.HealthBg.To = barPos + Vector2.new(0, h)
                     obj.HealthMain.From = barPos + Vector2.new(0, h)
-                    obj.HealthMain.To = barPos + Vector2.new(0, h - (h * hp))
-                    obj.HealthMain.Color = s.HealthLow:Lerp(s.HealthHigh, hp)
+                    obj.HealthMain.To = barPos + Vector2.new(0, h - (h * hpPercent))
+                    obj.HealthMain.Color = s.HealthLow:Lerp(s.HealthHigh, hpPercent)
                 end
 
                 -- Skeleton
@@ -209,18 +205,20 @@ local function Update()
                     for _, l in ipairs(obj.Skeleton) do l.Visible = false end
                 end
 
-                -- Scanline Fill
-                if s.FillEnabled and not s.FPSMode then
-                    for i, line in ipairs(obj.FillLines) do
-                        local t = (i-1)/(#obj.FillLines-1)
-                        line.From = tl + Vector2.new(0, h * t)
-                        line.To = tr + Vector2.new(0, h * t)
-                        line.Color = color; line.Transparency = s.FillTransparency; line.Visible = true
+                -- Tracers
+                if s.ShowTracer then
+                    local origin = s.TracerOrigin == "Bottom" and Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y) or Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+                    local fullVec = pos - origin
+                    for i, seg in ipairs(obj.Tracers) do
+                        local tS = (i-1)/#obj.Tracers
+                        seg.From, seg.To = origin + (fullVec * tS), origin + (fullVec * (i/#obj.Tracers))
+                        seg.Color = color; seg.Visible = true
                     end
                 else
-                    for _, l in ipairs(obj.FillLines) do l.Visible = false end
+                    for _, l in ipairs(obj.Tracers) do l.Visible = false end
                 end
 
+                -- Chams
                 if obj.Highlight then
                     obj.Highlight.Parent = char
                     obj.Highlight.Enabled = s.ChamsEnabled
@@ -243,10 +241,12 @@ Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(RemoveESP)
 for _, p in ipairs(Players:GetPlayers()) do CreateESP(p) end
 
-local RenderStepped = RunService.RenderStepped:Connect(Update)
+local RenderConnection = RunService.RenderStepped:Connect(Update)
 
 _G.ESP_Cleanup = function()
-    RenderStepped:Disconnect()
+    RenderConnection:Disconnect()
     for p, _ in pairs(ESPTable) do RemoveESP(p) end
     table.clear(ESPTable)
 end
+
+return _G.ESPLibrary

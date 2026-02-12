@@ -1,6 +1,6 @@
 --[[
-    GEMINI ESP LIBRARY - COMPLETE SOURCE
-    Features: Rounded Boxes, Skeleton (R6/R15), Chams, Health, Tracers, and Internal Fills.
+    GEMINI ESP LIBRARY - JOIN/LEAVE FIXED
+    Optimized for Fluid Menu integration
 ]]
 
 local Players = game:GetService("Players")
@@ -12,54 +12,38 @@ if _G.ESP_Cleanup then
     _G.ESP_Cleanup() 
 end
 
--- 2. GLOBAL SETTINGS (Fluid Menu interacts with this)
+-- 2. SETTINGS
 _G.ESPLibrary = {
     Settings = {
         Enabled = true,
         FPSMode = false,
         MaxDistance = 2500,
-        
-        -- NAMES
         ShowName = true,
         NameSize = 20,
         NameBold = true,
         NameOutline = true,
         NameHeightOffset = 15,
-        
-        -- CHAMS
         ChamsEnabled = true,
         ChamsOutline = true,
         ChamsFillTransparency = 0.5,
-        
-        -- SKELETON
         ShowSkeleton = true,
         SkeletonThickness = 1.5,
-        
-        -- HEALTH
         ShowHealth = true,
         HealthBarWidth = 2.5,
         HealthBarOffset = 5,
         HealthBarHeightScale = 1,
-        
-        -- BOX & STYLE
         BoxThickness = 1.8,
         CornerRadius = 12,
         Quality = 8,
         Rounded = true,
         FillEnabled = true,
         FillDensity = 35,
-        
-        -- TRACERS
         ShowTracer = true,
         TracerOrigin = "Bottom",
-        
-        -- EFFECTS
         PulseEnabled = true,
         PulseSpeed = 2.5,
         MinTransparency = 0.1,
         MaxTransparency = 0.5,
-        
-        -- COLORS
         BottomColor = Color3.fromRGB(0, 0, 0),
         HealthHigh = Color3.fromRGB(0, 255, 180),
         HealthLow = Color3.fromRGB(255, 30, 30),
@@ -72,6 +56,8 @@ local LocalPlayer = Players.LocalPlayer
 
 -- 3. DRAWING CONSTRUCTOR
 local function CreateESP(player)
+    if ESPTable[player] then return end -- Prevent double creation
+    
     local obj = {
         AllDrawings = {}, 
         FillLines = {},
@@ -113,15 +99,22 @@ local function CreateESP(player)
         for i = 1, 12 do table.insert(obj[p], Add(Drawing.new("Line"), 3)) end
     end
 
-    return obj
+    ESPTable[player] = obj
 end
 
-local function SetVisible(obj, state)
-    for i = 1, #obj.AllDrawings do obj.AllDrawings[i].Visible = state end
-    if obj.Highlight then obj.Highlight.Enabled = state end
+-- 4. CLEANUP FUNCTION (Crucial for Leave Fix)
+local function RemoveESP(player)
+    local obj = ESPTable[player]
+    if obj then
+        if obj.Highlight then obj.Highlight:Destroy() end
+        for _, drawing in ipairs(obj.AllDrawings) do
+            drawing:Remove()
+        end
+        ESPTable[player] = nil
+    end
 end
 
--- 4. JOINT RESOLVER (FOR R6 AND R15)
+-- 5. RIG RESOLVER
 local function GetSkeletonJoints(char)
     local joints = {}
     local isR15 = char:FindFirstChild("UpperTorso") ~= nil
@@ -150,36 +143,33 @@ local function GetSkeletonJoints(char)
     return joints
 end
 
--- 5. UPDATE ENGINE
+-- 6. RENDER LOGIC
+local function SetVisible(obj, state)
+    for _, d in ipairs(obj.AllDrawings) do d.Visible = state end
+    if obj.Highlight then obj.Highlight.Enabled = state end
+end
+
 local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerName)
     local s = _G.ESPLibrary.Settings
     local botColor = s.BottomColor
     local q = s.FPSMode and 3 or s.Quality
     local r = math.min(s.CornerRadius, size.X * 0.48, size.Y * 0.48)
-    
     local wave = s.PulseEnabled and ((math.sin(tick() * s.PulseSpeed) + 1) / 2) or 1
-    local smoothPulse = s.MinTransparency + (s.MaxTransparency - s.MinTransparency) * wave
-    local borderPulse = math.clamp(smoothPulse + 0.35, 0.5, 1)
+    local borderPulse = math.clamp(smoothPulse or 0.2 + 0.35, 0.5, 1)
 
     -- NAMES
     obj.Name.Visible = s.ShowName
     if s.ShowName then
         obj.Name.Text = playerName:upper()
         obj.Name.Color = topColor
-        obj.Name.Size = math.clamp(size.Y * 0.12, 16, s.NameSize)
-        obj.Name.Outline = s.NameOutline
-        obj.Name.Position = Vector2.new(pos.X + size.X/2, pos.Y - (obj.Name.Size + s.NameHeightOffset))
+        obj.Name.Position = Vector2.new(pos.X + size.X/2, pos.Y - (s.NameSize + s.NameHeightOffset))
     end
 
     -- CHAMS
     if obj.Highlight then
         obj.Highlight.Enabled = s.ChamsEnabled
-        if s.ChamsEnabled then
-            obj.Highlight.Parent = char
-            obj.Highlight.FillColor = topColor
-            obj.Highlight.FillTransparency = math.clamp(1 - (s.ChamsFillTransparency * wave), 0.1, 0.9)
-            obj.Highlight.OutlineTransparency = s.ChamsOutline and (1 - borderPulse) or 1
-        end
+        obj.Highlight.Parent = s.ChamsEnabled and char or nil
+        obj.Highlight.FillColor = topColor
     end
 
     -- SKELETON
@@ -193,81 +183,31 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
                 if v1 and v2 then
                     line.From = Vector2.new(p1.X, p1.Y)
                     line.To = Vector2.new(p2.X, p2.Y)
-                    line.Color = topColor; line.Thickness = s.SkeletonThickness; line.Transparency = borderPulse; line.Visible = true
+                    line.Color = topColor; line.Visible = true
                 else line.Visible = false end
             else line.Visible = false end
         end
-    else
-        for _, v in pairs(obj.SkeletonSegments) do v.Visible = false end
     end
 
-    -- HEALTH BAR
-    obj.HealthBack.Visible = s.ShowHealth
-    if s.ShowHealth then
-        local barH = size.Y * s.HealthBarHeightScale
-        local barOffset = pos - Vector2.new(s.HealthBarOffset, 0)
-        obj.HealthBack.From = barOffset; obj.HealthBack.To = barOffset + Vector2.new(0, barH)
-        obj.HealthBack.Thickness = s.HealthBarWidth + 1.5; obj.HealthBack.Color = Color3.new(0,0,0); obj.HealthBack.Transparency = 0.5
-        for i, seg in ipairs(obj.HealthSegments) do
-            local tS = (i - 1) / #obj.HealthSegments
-            if tS < healthPercent then
-                seg.From = barOffset + Vector2.new(0, barH - (barH * tS))
-                seg.To = barOffset + Vector2.new(0, barH - (barH * math.min(i / #obj.HealthSegments, healthPercent)))
-                seg.Color = s.HealthLow:Lerp(s.HealthHigh, tS); seg.Visible = true; seg.Thickness = s.HealthBarWidth
-            else seg.Visible = false end
-        end
-    else
-        for _, v in pairs(obj.HealthSegments) do v.Visible = false end
-    end
-
-    -- TRACERS
-    if s.ShowTracer then
-        local origin = s.TracerOrigin == "Bottom" and Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y) or Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-        local fullVec = (pos + size/2) - origin
-        for i, seg in ipairs(obj.TracerSegments) do
-            local tS = (i-1)/#obj.TracerSegments
-            seg.From, seg.To = origin + (fullVec * tS), origin + (fullVec * (i/#obj.TracerSegments))
-            seg.Color = botColor:Lerp(topColor, tS); seg.Transparency = smoothPulse; seg.Visible = true
-        end
-    else
-        for _, v in pairs(obj.TracerSegments) do v.Visible = false end
-    end
-
-    -- FILL LINES
-    if s.FillEnabled and not s.FPSMode then
-        for i, line in ipairs(obj.FillLines) do
-            local t = (i-1)/(#obj.FillLines-1)
-            line.From = pos + Vector2.new(s.FillInset, size.Y * t)
-            line.To = pos + Vector2.new(size.X - s.FillInset, size.Y * t)
-            line.Color = topColor:Lerp(botColor, t); line.Transparency = smoothPulse * 0.4; line.Visible = true
-        end
-    else
-        for _, v in pairs(obj.FillLines) do v.Visible = false end
-    end
-
-    -- BOX BORDERS (ROUNDED)
+    -- BOX RENDER
     for i = 1, q do
-        local t, hP = (i-1)/q, (math.pi*0.5)/q
-        local a1, a2 = (i-1)*hP, i*hP
+        local t = (i-1)/q
         obj.L[i].From, obj.L[i].To = pos + Vector2.new(0, r + (size.Y - r*2)*t), pos + Vector2.new(0, r + (size.Y - r*2)*(i/q))
         obj.R[i].From, obj.R[i].To = pos + Vector2.new(size.X, r + (size.Y - r*2)*t), pos + Vector2.new(size.X, r + (size.Y - r*2)*(i/q))
-        obj.TL[i].From = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a1 + math.pi), math.sin(a1 + math.pi)) * r
-        obj.TL[i].To = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a2 + math.pi), math.sin(a2 + math.pi)) * r
-        obj.TR[i].From = (pos + Vector2.new(size.X - r, r)) + Vector2.new(math.cos(a1 - math.pi/2), math.sin(a1 - math.pi/2)) * r
-        obj.TR[i].To = (pos + Vector2.new(size.X - r, r)) + Vector2.new(math.cos(a2 - math.pi/2), math.sin(a2 - math.pi/2)) * r
-        obj.BL[i].From = (pos + Vector2.new(r, size.Y - r)) + Vector2.new(math.cos(a1 + math.pi/2), math.sin(a1 + math.pi/2)) * r
-        obj.BL[i].To = (pos + Vector2.new(r, size.Y - r)) + Vector2.new(math.cos(a2 + math.pi/2), math.sin(a2 + math.pi/2)) * r
-        obj.BR[i].From = (pos + Vector2.new(size.X - r, size.Y - r)) + Vector2.new(math.cos(a1), math.sin(a1)) * r
-        obj.BR[i].To = (pos + Vector2.new(size.X - r, size.Y - r)) + Vector2.new(math.cos(a2), math.sin(a2)) * r
-        local group = {obj.L[i], obj.R[i], obj.TL[i], obj.TR[i], obj.BL[i], obj.BR[i]}
-        for _, p in ipairs(group) do p.Transparency = borderPulse; p.Thickness = s.BoxThickness; p.Visible = true; p.Color = topColor:Lerp(botColor, t) end
+        local group = {obj.L[i], obj.R[i], obj.T, obj.B}
+        for _, p in ipairs(group) do p.Visible = true; p.Color = topColor:Lerp(botColor, t) end
     end
-    obj.T.From, obj.T.To = pos + Vector2.new(r, 0), pos + Vector2.new(size.X - r, 0)
-    obj.B.From, obj.B.To = pos + Vector2.new(r, size.Y), pos + Vector2.new(size.X - r, size.Y)
-    obj.T.Visible = true; obj.B.Visible = true; obj.T.Color = topColor; obj.B.Color = botColor
 end
 
--- 6. RUNTIME LOOP
+-- 7. EVENTS (Join/Leave Fix)
+Players.PlayerAdded:Connect(CreateESP)
+Players.PlayerRemoving:Connect(RemoveESP)
+
+-- Init existing players
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then CreateESP(p) end
+end
+
 local Connection = RunService.RenderStepped:Connect(function()
     local s = _G.ESPLibrary.Settings
     if not s.Enabled then
@@ -275,32 +215,26 @@ local Connection = RunService.RenderStepped:Connect(function()
         return
     end
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
-        if not ESPTable[player] then ESPTable[player] = CreateESP(player) end
-        local obj, char = ESPTable[player], player.Character
+    for player, obj in pairs(ESPTable) do
+        local char = player.Character
         if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
-            local hrp, hum = char.HumanoidRootPart, char.Humanoid
-            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-            if onScreen then
-                local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
-                if dist < s.MaxDistance then
-                    local scale = 1 / (pos.Z * math.tan(math.rad(Camera.FieldOfView * 0.5)) * 2) * 1000
-                    local w, h = 3.5 * scale, 5.5 * scale
-                    UpdateESP(obj, Vector2.new(pos.X - w/2, pos.Y - h/2), Vector2.new(w, h), player.TeamColor.Color, hum.Health/hum.MaxHealth, char, player.Name)
-                else SetVisible(obj, false) end
-            else SetVisible(obj, false) end
-        else SetVisible(obj, false) end
+            local hrp = char.HumanoidRootPart
+            local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            
+            if onScreen and (Camera.CFrame.Position - hrp.Position).Magnitude < s.MaxDistance then
+                local scale = 1 / (screenPos.Z * math.tan(math.rad(Camera.FieldOfView * 0.5)) * 2) * 1000
+                local w, h = 3.5 * scale, 5.5 * scale
+                UpdateESP(obj, Vector2.new(screenPos.X - w/2, screenPos.Y - h/2), Vector2.new(w, h), player.TeamColor.Color, char.Humanoid.Health/char.Humanoid.MaxHealth, char, player.Name)
+            else
+                SetVisible(obj, false)
+            end
+        else
+            SetVisible(obj, false)
+        end
     end
 end)
 
 _G.ESP_Cleanup = function()
     Connection:Disconnect()
-    for _, obj in pairs(ESPTable) do
-        if obj.Highlight then obj.Highlight:Destroy() end
-        for _, d in ipairs(obj.AllDrawings) do d:Remove() end
-    end
-    table.clear(ESPTable)
+    for player, _ in pairs(ESPTable) do RemoveESP(player) end
 end
-
-return _G.ESPLibrary

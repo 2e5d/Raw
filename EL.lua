@@ -1,4 +1,5 @@
 -- [[ 1. AUTO-CLEANUP ]] --
+-- Ensures that if the script is re-executed, old drawings are deleted
 if _G.ESPLibraryInstance then
     _G.ESPLibraryInstance:Unload()
 end
@@ -9,7 +10,7 @@ local ESPLibrary = {
         FPSMode = false,        
         MaxDistance = 2500,
         
-        -- NAME SETTINGS
+        -- NAME SETTINGS (FIXED SCALING)
         ShowName = true,
         NameSize = 22,          
         MinNameSize = 12,       
@@ -58,7 +59,7 @@ local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 local Connection
 
--- [[ DRAWING CREATOR ]] --
+-- [[ DRAWING OBJECT CREATOR ]] --
 local function CreateESP(player)
     local obj = {
         AllDrawings = {}, 
@@ -119,21 +120,48 @@ end
 local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerName)
     local s = ESPLibrary.Settings
     local botColor = s.BottomColor
-    local wave = s.PulseEnabled and ((math.sin(tick() * s.PulseSpeed) + 1) / 2) or 1
-    local smoothPulse = s.MinTransparency + (s.MaxTransparency - s.MinTransparency) * wave
-    local borderPulse = math.clamp(smoothPulse + 0.35, 0.5, 1)
+    
+    -- Pulse logic for Fill/Transparency
+    local wave = ((math.sin(tick() * 2.5) + 1) / 2)
+    local smoothPulse = 0.05 + (0.45 - 0.05) * wave
 
-    -- 1. NAMES
+    -- 1. BOX RENDER
+    local q, r = s.Quality, math.min(s.CornerRadius, size.X/2, size.Y/2)
+    for i = 1, q do
+        local t, hP = (i-1)/q, (math.pi*0.5)/q
+        local a1, a2 = (i-1)*hP, i*hP
+        obj.L[i].From, obj.L[i].To = pos + Vector2.new(0, r + (size.Y - r*2)*t), pos + Vector2.new(0, r + (size.Y - r*2)*(i/q))
+        obj.R[i].From, obj.R[i].To = pos + Vector2.new(size.X, r + (size.Y - r*2)*t), pos + Vector2.new(size.X, r + (size.Y - r*2)*(i/q))
+        
+        obj.TL[i].From = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a1 + math.pi), math.sin(a1 + math.pi)) * r
+        obj.TL[i].To = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a2 + math.pi), math.sin(a2 + math.pi)) * r
+        obj.TR[i].From = (pos + Vector2.new(size.X-r, r)) + Vector2.new(math.cos(a1 - math.pi/2), math.sin(a1 - math.pi/2)) * r
+        obj.TR[i].To = (pos + Vector2.new(size.X-r, r)) + Vector2.new(math.cos(a2 - math.pi/2), math.sin(a2 - math.pi/2)) * r
+        obj.BL[i].From = (pos + Vector2.new(r, size.Y-r)) + Vector2.new(math.cos(a1 + math.pi/2), math.sin(a1 + math.pi/2)) * r
+        obj.BL[i].To = (pos + Vector2.new(r, size.Y-r)) + Vector2.new(math.cos(a2 + math.pi/2), math.sin(a2 + math.pi/2)) * r
+        obj.BR[i].From = (pos + Vector2.new(size.X-r, size.Y-r)) + Vector2.new(math.cos(a1), math.sin(a1)) * r
+        obj.BR[i].To = (pos + Vector2.new(size.X-r, size.Y-r)) + Vector2.new(math.cos(a2), math.sin(a2)) * r
+
+        local lines = {obj.L[i], obj.R[i], obj.TL[i], obj.TR[i], obj.BL[i], obj.BR[i]}
+        for _, l in ipairs(lines) do 
+            l.Color, l.Visible, l.Thickness, l.Transparency = topColor, true, s.BoxThickness, 1
+        end
+    end
+    obj.T.From, obj.T.To = pos + Vector2.new(r, 0), pos + Vector2.new(size.X-r, 0)
+    obj.B.From, obj.B.To = pos + Vector2.new(r, size.Y), pos + Vector2.new(size.X-r, size.Y)
+    obj.T.Visible, obj.B.Visible, obj.T.Color, obj.B.Color = true, true, topColor, topColor
+
+    -- 2. NAMES (SCALED)
     if s.ShowName then
         obj.Name.Text = playerName:upper()
         obj.Name.Color = topColor
-        local scaledSize = math.clamp(size.Y * 0.15, s.MinNameSize or 12, s.NameSize or 22)
+        local scaledSize = math.clamp(size.Y * 0.15, s.MinNameSize, s.NameSize)
         obj.Name.Size = scaledSize
         obj.Name.Position = Vector2.new(pos.X + size.X/2, pos.Y - (scaledSize + s.NameHeightOffset))
         obj.Name.Visible = true
     else obj.Name.Visible = false end
 
-    -- 2. SKELETON
+    -- 3. SKELETON
     if s.ShowSkeleton then
         local joints = char:FindFirstChild("UpperTorso") and {
             {char.Head, char.UpperTorso}, {char.UpperTorso, char.LowerTorso},
@@ -142,7 +170,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
             {char.LowerTorso, char.LeftUpperLeg}, {char.LeftUpperLeg, char.LeftLowerLeg},
             {char.LowerTorso, char.RightUpperLeg}, {char.RightUpperLeg, char.RightLowerLeg}
         } or {
-            {char.Head, char.Torso}, {char:FindFirstChild("Torso"), char:FindFirstChild("Left Arm")}, 
+            {char.Head, char:FindFirstChild("Torso")}, {char:FindFirstChild("Torso"), char:FindFirstChild("Left Arm")}, 
             {char:FindFirstChild("Torso"), char:FindFirstChild("Right Arm")},
             {char:FindFirstChild("Torso"), char:FindFirstChild("Left Leg")}, 
             {char:FindFirstChild("Torso"), char:FindFirstChild("Right Leg")}
@@ -164,35 +192,6 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         end
         for i = sIdx, #obj.SkeletonSegments do obj.SkeletonSegments[i].Visible = false end
     end
-
-    -- 3. BOX BORDERS (ROUNDED)
-    local q, r = s.Quality, math.min(s.CornerRadius, size.X/2, size.Y/2)
-    for i = 1, q do
-        local t, hP = (i-1)/q, (math.pi*0.5)/q
-        local a1, a2 = (i-1)*hP, i*hP
-        obj.L[i].From, obj.L[i].To = pos + Vector2.new(0, r + (size.Y - r*2)*t), pos + Vector2.new(0, r + (size.Y - r*2)*(i/q))
-        obj.R[i].From, obj.R[i].To = pos + Vector2.new(size.X, r + (size.Y - r*2)*t), pos + Vector2.new(size.X, r + (size.Y - r*2)*(i/q))
-        
-        obj.TL[i].From = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a1 + math.pi), math.sin(a1 + math.pi)) * r
-        obj.TL[i].To = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a2 + math.pi), math.sin(a2 + math.pi)) * r
-        
-        obj.TR[i].From = (pos + Vector2.new(size.X-r, r)) + Vector2.new(math.cos(a1 - math.pi/2), math.sin(a1 - math.pi/2)) * r
-        obj.TR[i].To = (pos + Vector2.new(size.X-r, r)) + Vector2.new(math.cos(a2 - math.pi/2), math.sin(a2 - math.pi/2)) * r
-        
-        obj.BL[i].From = (pos + Vector2.new(r, size.Y-r)) + Vector2.new(math.cos(a1 + math.pi/2), math.sin(a1 + math.pi/2)) * r
-        obj.BL[i].To = (pos + Vector2.new(r, size.Y-r)) + Vector2.new(math.cos(a2 + math.pi/2), math.sin(a2 + math.pi/2)) * r
-        
-        obj.BR[i].From = (pos + Vector2.new(size.X-r, size.Y-r)) + Vector2.new(math.cos(a1), math.sin(a1)) * r
-        obj.BR[i].To = (pos + Vector2.new(size.X-r, size.Y-r)) + Vector2.new(math.cos(a2), math.sin(a2)) * r
-
-        local lines = {obj.L[i], obj.R[i], obj.TL[i], obj.TR[i], obj.BL[i], obj.BR[i]}
-        for _, l in ipairs(lines) do 
-            l.Color, l.Visible, l.Thickness = topColor, true, s.BoxThickness 
-        end
-    end
-    obj.T.From, obj.T.To = pos + Vector2.new(r, 0), pos + Vector2.new(size.X-r, 0)
-    obj.B.From, obj.B.To = pos + Vector2.new(r, size.Y), pos + Vector2.new(size.X-r, size.Y)
-    obj.T.Visible, obj.B.Visible, obj.T.Color, obj.B.Color = true, true, topColor, topColor
 
     -- 4. FILL
     if s.FillEnabled then
@@ -226,6 +225,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
     else obj.Highlight.Enabled = false end
 end
 
+-- [[ INITIALIZATION ]] --
 function ESPLibrary:Init()
     _G.ESPLibraryInstance = self
     Connection = RunService.RenderStepped:Connect(function()

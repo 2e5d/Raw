@@ -1,5 +1,4 @@
 -- [[ 1. AUTO-CLEANUP ]] --
--- Deletes any existing instance to prevent lag or ghost drawings
 if _G.ESPLibraryInstance then
     _G.ESPLibraryInstance:Unload()
 end
@@ -10,17 +9,16 @@ local ESPLibrary = {
         FPSMode = false,        
         MaxDistance = 2500,
         
-        -- NAME SETTINGS (DYNAMIC SCALING)
+        -- NAME SETTINGS
         ShowName = true,
         NameSize = 22,          
-        MinNameSize = 12,       -- Essential to prevent clamp error
+        MinNameSize = 12,       
         NameBold = true,        
         NameOutline = true,
         NameHeightOffset = 15,  
         
         -- CHAMS SETTINGS
         ChamsEnabled = true,    
-        ChamsOutline = true,    
         ChamsFillTransparency = 0.5,
         
         -- SKELETON SETTINGS
@@ -44,16 +42,6 @@ local ESPLibrary = {
         FillHeightScale = 0.95, 
         FillInset = 1,        
         FillDensity = 35,       
-        
-        -- TRACER SETTINGS
-        ShowTracer = true,
-        TracerOrigin = "Bottom", 
-        
-        -- EFFECTS
-        PulseEnabled = true,
-        PulseSpeed = 2.5,       
-        MinTransparency = 0.05,  
-        MaxTransparency = 0.45,  
         
         -- COLORS
         BottomColor = Color3.fromRGB(0, 0, 0), 
@@ -81,7 +69,6 @@ local function CreateESP(player)
         Name = Drawing.new("Text"), 
         HealthBack = Drawing.new("Line"),
         HealthSegments = {},
-        TracerSegments = {},
         SkeletonSegments = {},
         Highlight = nil 
     }
@@ -105,7 +92,6 @@ local function CreateESP(player)
     Add(obj.Name, 20)
 
     for i = 1, 60 do table.insert(obj.SkeletonSegments, Add(Drawing.new("Line"), 2)) end
-    for i = 1, 10 do table.insert(obj.TracerSegments, Add(Drawing.new("Line"), 1)) end
     for i = 1, 30 do table.insert(obj.HealthSegments, Add(Drawing.new("Line"), 2)) end
     for i = 1, 50 do table.insert(obj.FillLines, Add(Drawing.new("Line"), 1)) end
 
@@ -137,35 +123,30 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
     local smoothPulse = s.MinTransparency + (s.MaxTransparency - s.MinTransparency) * wave
     local borderPulse = math.clamp(smoothPulse + 0.35, 0.5, 1)
 
-    -- NAMES (SCALING)
+    -- 1. NAMES
     if s.ShowName then
         obj.Name.Text = playerName:upper()
         obj.Name.Color = topColor
-        local minSize = s.MinNameSize or 12
-        local maxSize = s.NameSize or 22
-        local scaledSize = math.clamp(size.Y * 0.15, minSize, maxSize)
+        local scaledSize = math.clamp(size.Y * 0.15, s.MinNameSize or 12, s.NameSize or 22)
         obj.Name.Size = scaledSize
         obj.Name.Position = Vector2.new(pos.X + size.X/2, pos.Y - (scaledSize + s.NameHeightOffset))
         obj.Name.Visible = true
     else obj.Name.Visible = false end
 
-    -- SKELETON (R6/R15)
+    -- 2. SKELETON
     if s.ShowSkeleton then
-        local joints = {}
-        if char:FindFirstChild("UpperTorso") then -- R15
-            joints = {
-                {char:FindFirstChild("Head"), char:FindFirstChild("UpperTorso")}, {char:FindFirstChild("UpperTorso"), char:FindFirstChild("LowerTorso")},
-                {char:FindFirstChild("UpperTorso"), char:FindFirstChild("LeftUpperArm")}, {char:FindFirstChild("LeftUpperArm"), char:FindFirstChild("LeftLowerArm")},
-                {char:FindFirstChild("UpperTorso"), char:FindFirstChild("RightUpperArm")}, {char:FindFirstChild("RightUpperArm"), char:FindFirstChild("RightLowerArm")},
-                {char:FindFirstChild("LowerTorso"), char:FindFirstChild("LeftUpperLeg")}, {char:FindFirstChild("LeftUpperLeg"), char:FindFirstChild("LeftLowerLeg")},
-                {char:FindFirstChild("LowerTorso"), char:FindFirstChild("RightUpperLeg")}, {char:FindFirstChild("RightUpperLeg"), char:FindFirstChild("RightLowerLeg")}
-            }
-        else -- R6
-            joints = {
-                {char:FindFirstChild("Head"), char:FindFirstChild("Torso")}, {char:FindFirstChild("Torso"), char:FindFirstChild("Left Arm")}, {char:FindFirstChild("Torso"), char:FindFirstChild("Right Arm")},
-                {char:FindFirstChild("Torso"), char:FindFirstChild("Left Leg")}, {char:FindFirstChild("Torso"), char:FindFirstChild("Right Leg")}
-            }
-        end
+        local joints = char:FindFirstChild("UpperTorso") and {
+            {char.Head, char.UpperTorso}, {char.UpperTorso, char.LowerTorso},
+            {char.UpperTorso, char.LeftUpperArm}, {char.LeftUpperArm, char.LeftLowerArm},
+            {char.UpperTorso, char.RightUpperArm}, {char.RightUpperArm, char.RightLowerArm},
+            {char.LowerTorso, char.LeftUpperLeg}, {char.LeftUpperLeg, char.LeftLowerLeg},
+            {char.LowerTorso, char.RightUpperLeg}, {char.RightUpperLeg, char.RightLowerLeg}
+        } or {
+            {char.Head, char.Torso}, {char:FindFirstChild("Torso"), char:FindFirstChild("Left Arm")}, 
+            {char:FindFirstChild("Torso"), char:FindFirstChild("Right Arm")},
+            {char:FindFirstChild("Torso"), char:FindFirstChild("Left Leg")}, 
+            {char:FindFirstChild("Torso"), char:FindFirstChild("Right Leg")}
+        }
         local sIdx = 1
         for _, pair in ipairs(joints) do
             if pair[1] and pair[2] then
@@ -182,35 +163,69 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
             end
         end
         for i = sIdx, #obj.SkeletonSegments do obj.SkeletonSegments[i].Visible = false end
-    else
-        for _, l in ipairs(obj.SkeletonSegments) do l.Visible = false end
     end
 
-    -- CHAMS
+    -- 3. BOX BORDERS (ROUNDED)
+    local q, r = s.Quality, math.min(s.CornerRadius, size.X/2, size.Y/2)
+    for i = 1, q do
+        local t, hP = (i-1)/q, (math.pi*0.5)/q
+        local a1, a2 = (i-1)*hP, i*hP
+        obj.L[i].From, obj.L[i].To = pos + Vector2.new(0, r + (size.Y - r*2)*t), pos + Vector2.new(0, r + (size.Y - r*2)*(i/q))
+        obj.R[i].From, obj.R[i].To = pos + Vector2.new(size.X, r + (size.Y - r*2)*t), pos + Vector2.new(size.X, r + (size.Y - r*2)*(i/q))
+        
+        obj.TL[i].From = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a1 + math.pi), math.sin(a1 + math.pi)) * r
+        obj.TL[i].To = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a2 + math.pi), math.sin(a2 + math.pi)) * r
+        
+        obj.TR[i].From = (pos + Vector2.new(size.X-r, r)) + Vector2.new(math.cos(a1 - math.pi/2), math.sin(a1 - math.pi/2)) * r
+        obj.TR[i].To = (pos + Vector2.new(size.X-r, r)) + Vector2.new(math.cos(a2 - math.pi/2), math.sin(a2 - math.pi/2)) * r
+        
+        obj.BL[i].From = (pos + Vector2.new(r, size.Y-r)) + Vector2.new(math.cos(a1 + math.pi/2), math.sin(a1 + math.pi/2)) * r
+        obj.BL[i].To = (pos + Vector2.new(r, size.Y-r)) + Vector2.new(math.cos(a2 + math.pi/2), math.sin(a2 + math.pi/2)) * r
+        
+        obj.BR[i].From = (pos + Vector2.new(size.X-r, size.Y-r)) + Vector2.new(math.cos(a1), math.sin(a1)) * r
+        obj.BR[i].To = (pos + Vector2.new(size.X-r, size.Y-r)) + Vector2.new(math.cos(a2), math.sin(a2)) * r
+
+        local lines = {obj.L[i], obj.R[i], obj.TL[i], obj.TR[i], obj.BL[i], obj.BR[i]}
+        for _, l in ipairs(lines) do 
+            l.Color, l.Visible, l.Thickness = topColor, true, s.BoxThickness 
+        end
+    end
+    obj.T.From, obj.T.To = pos + Vector2.new(r, 0), pos + Vector2.new(size.X-r, 0)
+    obj.B.From, obj.B.To = pos + Vector2.new(r, size.Y), pos + Vector2.new(size.X-r, size.Y)
+    obj.T.Visible, obj.B.Visible, obj.T.Color, obj.B.Color = true, true, topColor, topColor
+
+    -- 4. FILL
+    if s.FillEnabled then
+        for i, line in ipairs(obj.FillLines) do
+            local t = (i-1)/#obj.FillLines
+            line.From, line.To = pos + Vector2.new(0, size.Y * t), pos + Vector2.new(size.X, size.Y * t)
+            line.Color, line.Transparency, line.Visible = topColor:Lerp(botColor, t), smoothPulse, true
+        end
+    else for _, l in ipairs(obj.FillLines) do l.Visible = false end end
+
+    -- 5. HEALTH
+    if s.ShowHealth then
+        local bH, bO = size.Y * s.HealthBarHeightScale, pos - Vector2.new(s.HealthBarOffset, 0)
+        obj.HealthBack.From, obj.HealthBack.To = bO, bO + Vector2.new(0, bH)
+        obj.HealthBack.Visible, obj.HealthBack.Thickness = true, s.HealthBarWidth + 1
+        for i, seg in ipairs(obj.HealthSegments) do
+            local tS = (i-1)/#obj.HealthSegments
+            if tS < healthPercent then
+                seg.From = bO + Vector2.new(0, bH - (bH * tS))
+                seg.To = bO + Vector2.new(0, bH - (bH * math.min(i/#obj.HealthSegments, healthPercent)))
+                seg.Color, seg.Visible, seg.Thickness = s.HealthLow:Lerp(s.HealthHigh, tS), true, s.HealthBarWidth
+            else seg.Visible = false end
+        end
+    end
+
+    -- 6. CHAMS
     if s.ChamsEnabled and char then
         obj.Highlight.Parent = char
         obj.Highlight.FillColor = topColor
-        obj.Highlight.FillTransparency = math.clamp(1 - (s.ChamsFillTransparency * wave), 0.1, 0.9)
         obj.Highlight.Enabled = true
     else obj.Highlight.Enabled = false end
-
-    -- BOXES & FILL
-    if s.FillEnabled and not s.FPSMode then
-        local fH = size.Y * s.FillHeightScale
-        for i, line in ipairs(obj.FillLines) do
-            local t = (i-1)/#obj.FillLines
-            line.From = pos + Vector2.new(0, size.Y * t)
-            line.To = pos + Vector2.new(size.X, size.Y * t)
-            line.Color = topColor:Lerp(botColor, t)
-            line.Transparency = smoothPulse
-            line.Visible = true
-        end
-    else
-        for _, l in ipairs(obj.FillLines) do l.Visible = false end
-    end
 end
 
--- [[ LIBRARY METHODS ]] --
 function ESPLibrary:Init()
     _G.ESPLibraryInstance = self
     Connection = RunService.RenderStepped:Connect(function()

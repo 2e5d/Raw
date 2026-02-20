@@ -12,27 +12,24 @@ _G.ESPLibrary = {
         MaxDistance = 5000,
         TeamCheck = true,
         
-        -- Text Settings
+        -- Granit Name Settings
         ShowName = true,
-        NameSize = 16,
+        NameSize = 14,
+        
+        -- Granit Skeleton Settings
+        ShowSkeleton = true,
+        SkeletonThickness = 2,
         
         -- Granit Box Settings
         FillEnabled = true,
-        BoxFillTransparency = 0.45,
-        BoxThickness = 2,
+        BoxFillTransparency = 0.4,
         CornerRadius = 10,
         
-        -- Smooth Skeleton & Tracer
-        ShowSkeleton = true,
-        ShowTracer = true,
-        ShowHealth = true,
-        
         -- Colors
-        BottomColor = Color3.fromRGB(0, 0, 0), -- Fades to black
+        BottomColor = Color3.fromRGB(0, 0, 0), -- Gradient fades to this
         HealthHigh = Color3.fromRGB(0, 255, 150),
         HealthLow = Color3.fromRGB(255, 50, 50),
         
-        -- Pulse
         PulseEnabled = true,
         PulseSpeed = 3
     }
@@ -42,9 +39,8 @@ local ESPTable = {}
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- Central GUI for all ESP elements
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "GranitVisuals"
+ScreenGui.Name = "GranitVisuals_Full"
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = game:GetService("CoreGui")
 
@@ -55,14 +51,14 @@ local function CreateGranitFrame(parent, radius)
     frame.Parent = parent
     
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, radius or 10)
+    corner.CornerRadius = UDim.new(0, radius or 0)
     corner.Parent = frame
     
     local gradient = Instance.new("UIGradient")
     gradient.Rotation = 90
     gradient.Parent = frame
     
-    return frame, gradient, corner
+    return frame, gradient
 end
 
 local function CreateESP(player)
@@ -70,131 +66,138 @@ local function CreateESP(player)
     
     local obj = {
         Player = player,
-        Container = Instance.new("Frame"),
-        -- Box Fill
-        Box, BoxGradient, BoxCorner = CreateGranitFrame(ScreenGui, _G.ESPLibrary.Settings.CornerRadius),
-        -- Name
-        NameTag = Instance.new("TextLabel"),
-        -- Health
-        HealthBar, HealthGradient = CreateGranitFrame(ScreenGui, 2),
-        -- Skeleton & Tracer use drawing for precision, but lerp colors
-        Skeleton = {},
-        Tracer = Drawing.new("Line")
+        -- Box
+        Box, BoxGradient = CreateGranitFrame(ScreenGui, _G.ESPLibrary.Settings.CornerRadius),
+        -- Name (Using TextLabel with UIGradient)
+        NameLabel = Instance.new("TextLabel"),
+        NameGradient = Instance.new("UIGradient"),
+        -- Skeleton (Each bone is a GUI Frame for Granit effect)
+        Bones = {},
+        BoneGradients = {}
     }
     
-    obj.Container.BackgroundTransparency = 1
-    obj.Container.Parent = ScreenGui
+    -- Setup Name
+    obj.NameLabel.BackgroundTransparency = 1
+    obj.NameLabel.Font = Enum.Font.GothamBold
+    obj.NameLabel.TextStrokeTransparency = 0.8
+    obj.NameLabel.Parent = ScreenGui
+    obj.NameGradient.Rotation = 90
+    obj.NameGradient.Parent = obj.NameLabel
     
-    obj.NameTag.BackgroundTransparency = 1
-    obj.NameTag.Font = Enum.Font.GothamBold
-    obj.NameTag.TextColor3 = Color3.new(1,1,1)
-    obj.NameTag.TextStrokeTransparency = 0
-    obj.NameTag.Parent = ScreenGui
-    
-    obj.Tracer.Thickness = 2
-    obj.Tracer.Transparency = 1
-    
-    for i = 1, 6 do -- Basic skeleton joints
-        local l = Drawing.new("Line")
-        l.Thickness = 2
-        table.insert(obj.Skeleton, l)
+    -- Setup Skeleton Bones (10 standard bones)
+    for i = 1, 10 do
+        local b, g = CreateGranitFrame(ScreenGui, 5)
+        b.Visible = false
+        obj.Bones[i] = b
+        obj.BoneGradients[i] = g
     end
     
     ESPTable[player] = obj
+end
+
+local function UpdateBone(bone, gradient, p1, p2, color1, color2)
+    local dist = (p1 - p2).Magnitude
+    local center = (p1 + p2) / 2
+    local angle = math.atan2(p2.Y - p1.Y, p2.X - p1.X)
+    
+    bone.Visible = true
+    bone.Size = UDim2.new(0, dist, 0, _G.ESPLibrary.Settings.SkeletonThickness)
+    bone.Position = UDim2.new(0, center.X - (dist/2), 0, center.Y)
+    bone.Rotation = math.deg(angle)
+    
+    gradient.Color = ColorSequence.new(color1, color2)
+end
+
+local function GetJoints(char)
+    local hum = char:FindFirstChild("Humanoid")
+    local isR15 = hum and hum.RigType == Enum.HumanoidRigType.R15
+    if isR15 then
+        return {
+            {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+            {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"},
+            {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"},
+            {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"},
+            {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}
+        }
+    else
+        return {
+            {"Head", "Torso"}, {"Torso", "Left Arm"}, {"Torso", "Right Arm"},
+            {"Torso", "Left Leg"}, {"Torso", "Right Leg"}
+        }
+    end
 end
 
 local function UpdateESP(obj, player)
     local s = _G.ESPLibrary.Settings
     local char = player.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChild("Humanoid")
     
-    if not hrp or not hum or hum.Health <= 0 then
+    if not hrp or not char:FindFirstChild("Humanoid") then
         obj.Box.Visible = false
-        obj.NameTag.Visible = false
-        obj.HealthBar.Visible = false
-        obj.Tracer.Visible = false
-        for _, l in pairs(obj.Skeleton) do l.Visible = false end
+        obj.NameLabel.Visible = false
+        for _, b in pairs(obj.Bones) do b.Visible = false end
         return
     end
 
     local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
     if not onScreen or (s.TeamCheck and player.Team == LocalPlayer.Team) then
         obj.Box.Visible = false
-        obj.NameTag.Visible = false
-        obj.HealthBar.Visible = false
-        obj.Tracer.Visible = false
+        obj.NameLabel.Visible = false
+        for _, b in pairs(obj.Bones) do b.Visible = false end
         return
     end
 
-    local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
-    if dist > s.MaxDistance then obj.Box.Visible = false return end
-
+    local teamCol = player.TeamColor.Color
     local scale = 1 / (pos.Z * math.tan(math.rad(Camera.FieldOfView * 0.5)) * 2) * 1000
     local w, h = 4 * scale, 6 * scale
     local x, y = pos.X - w/2, pos.Y - h/2
-    
-    local teamCol = player.TeamColor.Color
-    local wave = s.PulseEnabled and ((math.sin(tick() * s.PulseSpeed) + 1) / 2) or 1
-    local transparency = s.BoxFillTransparency * (0.8 + (wave * 0.2))
 
-    -- 1. SMOOTH GRANIT BOX
+    -- 1. GRANIT BOX
     obj.Box.Visible = s.FillEnabled
     obj.Box.Position = UDim2.new(0, x, 0, y)
     obj.Box.Size = UDim2.new(0, w, 0, h)
-    obj.Box.BackgroundTransparency = 1 - transparency
+    obj.Box.BackgroundTransparency = 1 - s.BoxFillTransparency
     obj.BoxGradient.Color = ColorSequence.new(teamCol, s.BottomColor)
 
-    -- 2. NAME
-    obj.NameTag.Visible = s.ShowName
-    obj.NameTag.Text = player.Name:upper()
-    obj.NameTag.Position = UDim2.new(0, x, 0, y - s.NameSize - 5)
-    obj.NameTag.Size = UDim2.new(0, w, 0, s.NameSize)
-    obj.NameTag.TextSize = s.NameSize
+    -- 2. GRANIT NAME
+    obj.NameLabel.Visible = s.ShowName
+    obj.NameLabel.Text = player.Name:upper()
+    obj.NameLabel.Position = UDim2.new(0, x, 0, y - s.NameSize - 5)
+    obj.NameLabel.Size = UDim2.new(0, w, 0, s.NameSize)
+    obj.NameLabel.TextSize = s.NameSize
+    obj.NameGradient.Color = ColorSequence.new(teamCol, s.BottomColor)
 
-    -- 3. HEALTH BAR (Granit style)
-    obj.HealthBar.Visible = s.ShowHealth
-    local healthH = h * (hum.Health / hum.MaxHealth)
-    obj.HealthBar.Position = UDim2.new(0, x - 6, 0, y + (h - healthH))
-    obj.HealthBar.Size = UDim2.new(0, 3, 0, healthH)
-    obj.HealthGradient.Color = ColorSequence.new(s.HealthHigh, s.HealthLow)
-
-    -- 4. TRACER
-    obj.Tracer.Visible = s.ShowTracer
-    obj.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-    obj.Tracer.To = Vector2.new(pos.X, pos.Y + h/2)
-    obj.Tracer.Color = teamCol
-
-    -- 5. SKELETON (Simplified for performance)
+    -- 3. GRANIT SKELETON
     if s.ShowSkeleton then
-        for i, l in pairs(obj.Skeleton) do
-            l.Visible = true
-            l.Color = teamCol
-            -- Simplified lines (Head to Torso, Torso to Arms, etc.)
-            -- [Skeleton Logic remains standard Drawing lines for perfect alignment]
+        local joints = GetJoints(char)
+        for i, pair in ipairs(joints) do
+            local p1_part = char:FindFirstChild(pair[1])
+            local p2_part = char:FindFirstChild(pair[2])
+            if p1_part and p2_part and obj.Bones[i] then
+                local v1, vis1 = Camera:WorldToViewportPoint(p1_part.Position)
+                local v2, vis2 = Camera:WorldToViewportPoint(p2_part.Position)
+                if vis1 and vis2 then
+                    UpdateBone(obj.Bones[i], obj.BoneGradients[i], Vector2.new(v1.X, v1.Y), Vector2.new(v2.X, v2.Y), teamCol, s.BottomColor)
+                else obj.Bones[i].Visible = false end
+            end
         end
+    else
+        for _, b in pairs(obj.Bones) do b.Visible = false end
     end
 end
 
--- Main Loop
-local renderConnection = RunService.RenderStepped:Connect(function()
-    if not _G.ESPLibrary.Settings.Enabled then 
-        ScreenGui.Enabled = false 
-        return 
-    end
+RunService.RenderStepped:Connect(function()
+    if not _G.ESPLibrary.Settings.Enabled then ScreenGui.Enabled = false return end
     ScreenGui.Enabled = true
-    for player, obj in pairs(ESPTable) do
-        UpdateESP(obj, player)
-    end
+    for player, obj in pairs(ESPTable) do UpdateESP(obj, player) end
 end)
 
 Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(function(p)
     if ESPTable[p] then
         ESPTable[p].Box:Destroy()
-        ESPTable[p].NameTag:Destroy()
-        ESPTable[p].HealthBar:Destroy()
-        ESPTable[p].Tracer:Remove()
+        ESPTable[p].NameLabel:Destroy()
+        for _, b in pairs(ESPTable[p].Bones) do b:Destroy() end
         ESPTable[p] = nil
     end
 end)
@@ -202,11 +205,7 @@ end)
 for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
 
 _G.ESP_Cleanup = function()
-    renderConnection:Disconnect()
     ScreenGui:Destroy()
-    for _, v in pairs(ESPTable) do
-        v.Tracer:Remove()
-    end
     table.clear(ESPTable)
 end
 

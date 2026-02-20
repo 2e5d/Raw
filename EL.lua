@@ -10,10 +10,10 @@ _G.ESPLibrary = {
     Settings = {
         Enabled = true,
         FPSMode = false,
-        MaxDistance = 2500,
+        MaxDistance = 5000,
         
         ShowName = true,
-        NameSize = 20,
+        NameSize = 18,
         NameBold = true,
         NameOutline = true,
         NameHeightOffset = 15,
@@ -26,16 +26,16 @@ _G.ESPLibrary = {
         SkeletonThickness = 1.5,
         
         ShowHealth = true,
-        HealthBarWidth = 2.5,
-        HealthBarOffset = 5,
+        HealthBarWidth = 2.0,
+        HealthBarOffset = 8,
         HealthBarHeightScale = 1,
         
         BoxThickness = 1.8,
         CornerRadius = 12,
-        Quality = 8,
+        Quality = 12,
         Rounded = true,
         FillEnabled = true,
-        FillDensity = 35,
+        FillDensity = 45,
         FillInset = 2,
         
         ShowTracer = true,
@@ -43,8 +43,8 @@ _G.ESPLibrary = {
         
         PulseEnabled = true,
         PulseSpeed = 2.5,
-        MinTransparency = 0.1,
-        MaxTransparency = 0.5,
+        MinTransparency = 0.2,
+        MaxTransparency = 0.6,
         
         BottomColor = Color3.fromRGB(0, 0, 0),
         HealthHigh = Color3.fromRGB(0, 255, 180),
@@ -76,7 +76,7 @@ local function CreateESP(player)
     }
 
     local hl = Instance.new("Highlight")
-    hl.Name = "Gemini_Chams"
+    hl.Name = "Fluid_Chams"
     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     obj.Highlight = hl
 

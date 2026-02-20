@@ -11,7 +11,7 @@ espModule.Config = {
     TeamCheck = true,
     ESPDistance = 1000,
     BoxColor = Color3.new(0.403922, 0.34902, 0.701961),
-    BoxGradientEnabled = true, -- Set to true for Gradient Boxes [cite: 1, 16]
+    BoxGradientEnabled = true,
     BoxGradientColor1 = Color3.new(0.403922, 0.34902, 0.701961),
     BoxGradientColor2 = Color3.new(0.8, 0.4, 1),
     BoxFillTransparency = 0.5,
@@ -38,7 +38,7 @@ espModule.Config = {
 }
 
 espModule.State = {
-    BoxEnabled = true, -- Enabled by default
+    BoxEnabled = true,
     NameEnabled = true,
     DistanceEnabled = true,
     SkeletonEnabled = false,
@@ -63,9 +63,7 @@ local currentCamera = workspaceService.CurrentCamera
 local updateInterval = 30
 local heartbeatConnection = nil
 local renderConnection = nil
-local currentRotation = 0
 
--- UI Initialization [cite: 4]
 if not game:GetService("CoreGui"):FindFirstChild("EspGui") then
     local gui = Instance.new("ScreenGui")
     gui.Name = "EspGui"
@@ -76,38 +74,29 @@ else
     espModule.EspGui = game:GetService("CoreGui").EspGui
 end
 
-local function SafeLerp(a, b, t)
-    return a + (b - a) * t
+local function safeCall(func, ...)
+    local success, result = pcall(func, ...)
+    if not success then
+        warn("ESP Error: " .. tostring(result))
+    end
+    return success, result
 end
 
-function espModule:CreateBox(_)
+function espModule:CreateBox(player)
     local boxDrawings = {
         Box = Drawing.new("Square"),
         BoxOutline = Drawing.new("Square"),
-        BoxTop = Drawing.new("Line"),
-        BoxBottom = Drawing.new("Line"),
-        BoxLeft = Drawing.new("Line"),
-        BoxRight = Drawing.new("Line"),
         Name = Drawing.new("Text"),
         Distance = Drawing.new("Text"),
         HealthText = Instance.new("TextLabel"),
         HealthBarBackground = Instance.new("Frame"),
-        HealthBarOutline = Instance.new("UIStroke"),
         HealthBar = Instance.new("Frame"),
         HealthBarGradient = Instance.new("UIGradient"),
-        ArmorText = Instance.new("TextLabel"),
-        ArmorBarBackground = Instance.new("Frame"),
-        ArmorBarOutline = Instance.new("UIStroke"),
-        ArmorBar = Instance.new("Frame"),
-        ArmorBarGradient = Instance.new("UIGradient"),
-        CurrentHealth = 100,
-        TargetHealth = 100,
         FillFrame = Instance.new("Frame"),
         Gradient = Instance.new("UIGradient"),
         Stroke = Instance.new("UIStroke")
     }
     
-    -- Setup Gradient Fill [cite: 4, 5]
     boxDrawings.FillFrame.Parent = self.EspGui
     boxDrawings.FillFrame.BorderSizePixel = 0
     boxDrawings.FillFrame.BackgroundTransparency = 1
@@ -116,31 +105,37 @@ function espModule:CreateBox(_)
     boxDrawings.Gradient.Parent = boxDrawings.FillFrame
     boxDrawings.Gradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, self.Config.BoxGradientColor1),
-        ColorSequenceKeypoint.new(0.5, self.Config.BoxGradientColor2),
-        ColorSequenceKeypoint.new(1, self.Config.BoxGradientColor1)
+        ColorSequenceKeypoint.new(1, self.Config.BoxGradientColor2)
     })
     
     boxDrawings.Stroke.Parent = boxDrawings.FillFrame
-    boxDrawings.Stroke.Thickness = 1.2
+    boxDrawings.Stroke.Thickness = 1
     boxDrawings.Stroke.Color = self.Config.BoxOutlineColor
-    boxDrawings.Stroke.Enabled = self.Config.BoxOutlineEnabled
-
-    -- Setup Texts [cite: 5, 6]
-    boxDrawings.Name.Size = 13
+    
+    boxDrawings.Name.Size = 14
     boxDrawings.Name.Center = true
     boxDrawings.Name.Outline = true
-    boxDrawings.Distance.Size = 13
+    boxDrawings.Name.Visible = false
+    
+    boxDrawings.Distance.Size = 14
     boxDrawings.Distance.Center = true
     boxDrawings.Distance.Outline = true
+    boxDrawings.Distance.Visible = false
 
-    -- Setup Health Bar [cite: 7]
     boxDrawings.HealthBarBackground.Parent = self.EspGui
-    boxDrawings.HealthBar.Parent = self.EspGui
+    boxDrawings.HealthBarBackground.BackgroundColor3 = Color3.new(0, 0, 0)
+    boxDrawings.HealthBarBackground.BackgroundTransparency = 0.5
+    boxDrawings.HealthBarBackground.BorderSizePixel = 0
+    boxDrawings.HealthBarBackground.Visible = false
+
+    boxDrawings.HealthBar.Parent = boxDrawings.HealthBarBackground
+    boxDrawings.HealthBar.BorderSizePixel = 0
+    boxDrawings.HealthBar.Visible = true
+
     boxDrawings.HealthBarGradient.Parent = boxDrawings.HealthBar
     boxDrawings.HealthBarGradient.Rotation = 90
     boxDrawings.HealthBarGradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, self.Config.HealthBarColor1),
-        ColorSequenceKeypoint.new(0.5, self.Config.HealthBarColor2),
         ColorSequenceKeypoint.new(1, self.Config.HealthBarColor3)
     })
 
@@ -148,84 +143,93 @@ function espModule:CreateBox(_)
 end
 
 function espModule:UpdateBox()
-    if not self or not self.State or not self.Config then return end
-    if not self.State.BoxEnabled then return end
-
-    for _, otherPlayer in ipairs(playersService:GetPlayers()) do
-        if otherPlayer ~= localPlayer and otherPlayer.Character then
-            local char = otherPlayer.Character
+    for _, player in ipairs(playersService:GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            local char = player.Character
             local root = char:FindFirstChild("HumanoidRootPart")
             local hum = char:FindFirstChild("Humanoid")
 
-            if root and hum and hum.Health > 0 then
-                local rootPos, onScreen = currentCamera:WorldToViewportPoint(root.Position)
-                
-                if onScreen then
-                    if not self.Caches.BoxCache[otherPlayer] then
-                        self.Caches.BoxCache[otherPlayer] = self:CreateBox(otherPlayer)
+            if root and hum then
+                local pos, onScreen = currentCamera:WorldToViewportPoint(root.Position)
+                local distance = (currentCamera.CFrame.Position - root.Position).Magnitude
+
+                if onScreen and distance <= self.Config.ESPDistance then
+                    if not self.Caches.BoxCache[player] then
+                        self.Caches.BoxCache[player] = self:CreateBox(player)
                     end
                     
-                    local box = self.Caches.BoxCache[otherPlayer]
+                    local box = self.Caches.BoxCache[player]
                     local head = char:FindFirstChild("Head")
-                    local headPos = head and head.Position + Vector3.new(0, 1, 0) or root.Position + Vector3.new(0, 3, 0)
-                    local feetPos = root.Position - Vector3.new(0, 3, 0)
+                    local headPos = head and head.Position + Vector3.new(0, 0.5, 0) or root.Position + Vector3.new(0, 1.5, 0)
+                    local legPos = root.Position - Vector3.new(0, 3, 0)
                     
                     local headScreen = currentCamera:WorldToViewportPoint(headPos)
-                    local feetScreen = currentCamera:WorldToViewportPoint(feetPos)
+                    local legScreen = currentCamera:WorldToViewportPoint(legPos)
                     
-                    local height = math.abs(headScreen.Y - feetScreen.Y)
+                    local height = math.abs(headScreen.Y - legScreen.Y)
                     local width = height * 0.6
-                    local topLeft = Vector2.new(rootPos.X - width/2, (headScreen.Y + feetScreen.Y)/2 - height/2)
+                    local topLeft = Vector2.new(pos.X - width/2, pos.Y - height/2)
 
-                    -- Apply Gradient Box [cite: 16]
-                    if self.Config.BoxGradientEnabled then
-                        box.FillFrame.Position = UDim2.fromOffset(topLeft.X, topLeft.Y)
-                        box.FillFrame.Size = UDim2.fromOffset(width, height)
-                        box.FillFrame.BackgroundTransparency = self.Config.BoxFillTransparency
-                        box.FillFrame.Visible = true
-                        box.Box.Visible = false
-                    else
-                        box.Box.Position = topLeft
-                        box.Box.Size = Vector2.new(width, height)
-                        box.Box.Visible = true
-                        box.FillFrame.Visible = false
+                    if self.State.BoxEnabled then
+                        if self.Config.BoxGradientEnabled then
+                            box.FillFrame.Position = UDim2.fromOffset(topLeft.X, topLeft.Y)
+                            box.FillFrame.Size = UDim2.fromOffset(width, height)
+                            box.FillFrame.BackgroundTransparency = self.Config.BoxFillTransparency
+                            box.FillFrame.Visible = true
+                            box.Box.Visible = false
+                        else
+                            box.Box.Position = topLeft
+                            box.Box.Size = Vector2.new(width, height)
+                            box.Box.Color = self.Config.BoxColor
+                            box.Box.Visible = true
+                            box.FillFrame.Visible = false
+                        end
                     end
 
-                    -- Name and Distance [cite: 17]
-                    box.Name.Position = Vector2.new(rootPos.X, topLeft.Y - 15)
-                    box.Name.Text = otherPlayer.Name
-                    box.Name.Visible = self.State.NameEnabled
+                    if self.State.NameEnabled then
+                        box.Name.Position = Vector2.new(pos.X, topLeft.Y - 15)
+                        box.Name.Text = player.Name
+                        box.Name.Visible = true
+                    end
 
-                    local dist = (currentCamera.CFrame.Position - root.Position).Magnitude
-                    box.Distance.Position = Vector2.new(rootPos.X, feetScreen.Y + 5)
-                    box.Distance.Text = math.floor(dist) .. "m"
-                    box.Distance.Visible = self.State.DistanceEnabled
+                    if self.State.DistanceEnabled then
+                        box.Distance.Position = Vector2.new(pos.X, topLeft.Y + height + 5)
+                        box.Distance.Text = "[" .. math.floor(distance) .. "m]"
+                        box.Distance.Visible = true
+                    end
 
-                    -- Health Bar Logic [cite: 18, 19]
-                    local healthPercent = hum.Health / hum.MaxHealth
-                    local barX = topLeft.X - 5
-                    box.HealthBarBackground.Position = UDim2.fromOffset(barX, topLeft.Y)
-                    box.HealthBarBackground.Size = UDim2.fromOffset(2, height)
-                    box.HealthBarBackground.Visible = self.State.HealthBarEnabled
-                    
-                    box.HealthBar.Position = UDim2.fromOffset(barX, topLeft.Y + (height * (1 - healthPercent)))
-                    box.HealthBar.Size = UDim2.fromOffset(2, height * healthPercent)
-                    box.HealthBar.Visible = self.State.HealthBarEnabled
+                    if self.State.HealthBarEnabled then
+                        local healthPercent = hum.Health / hum.MaxHealth
+                        box.HealthBarBackground.Position = UDim2.fromOffset(topLeft.X - 6, topLeft.Y)
+                        box.HealthBarBackground.Size = UDim2.fromOffset(4, height)
+                        box.HealthBarBackground.Visible = true
+                        
+                        box.HealthBar.Position = UDim2.fromScale(0, 1 - healthPercent)
+                        box.HealthBar.Size = UDim2.fromScale(1, healthPercent)
+                    end
                 else
-                    if self.Caches.BoxCache[otherPlayer] then
-                        self.Caches.BoxCache[otherPlayer].FillFrame.Visible = false
-                        self.Caches.BoxCache[otherPlayer].Name.Visible = false
-                        self.Caches.BoxCache[otherPlayer].Distance.Visible = false
-                    end
+                    self:ClearBox(player)
                 end
             end
         end
     end
 end
 
--- Run loop
-runService.RenderStepped:Connect(function()
-    espModule:UpdateBox()
-end)
+function espModule:ClearBox(player)
+    local box = self.Caches.BoxCache[player]
+    if box then
+        box.FillFrame.Visible = false
+        box.Box.Visible = false
+        box.Name.Visible = false
+        box.Distance.Visible = false
+        box.HealthBarBackground.Visible = false
+    end
+end
+
+function espModule:Init()
+    renderConnection = runService.RenderStepped:Connect(function()
+        self:UpdateBox()
+    end)
+end
 
 return espModule

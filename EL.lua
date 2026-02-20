@@ -34,9 +34,13 @@ _G.ESPLibrary = {
         CornerRadius = 12,
         Quality = 12,
         Rounded = true,
+        
+        -- Matcha Gradient/Fill Settings
+        BoxGradientEnabled = true,
         FillEnabled = true,
         FillDensity = 45,
         FillInset = 2,
+        BoxFillTransparency = 0.5,
         
         ShowTracer = true,
         TracerOrigin = "Bottom",
@@ -95,7 +99,11 @@ local function CreateESP(player)
     for i = 1, 20 do table.insert(obj.SkeletonSegments, Add(Drawing.new("Line"), 2)) end
     for i = 1, 10 do table.insert(obj.TracerSegments, Add(Drawing.new("Line"), 1)) end
     for i = 1, 30 do table.insert(obj.HealthSegments, Add(Drawing.new("Line"), 2)) end
-    for i = 1, _G.ESPLibrary.Settings.FillDensity do table.insert(obj.FillLines, Add(Drawing.new("Line"), 1)) end
+    
+    -- Initialize Fill Lines for Matcha Gradient Effect
+    for i = 1, _G.ESPLibrary.Settings.FillDensity do 
+        table.insert(obj.FillLines, Add(Drawing.new("Line"), 1)) 
+    end
 
     local parts = {"L", "R", "TL", "TR", "BL", "BR"}
     for _, p in ipairs(parts) do
@@ -228,17 +236,21 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         for _, v in pairs(obj.TracerSegments) do v.Visible = false end
     end
 
+    -- Matcha Style Fill/Gradient Implementation
     if s.FillEnabled and not s.FPSMode then
         for i, line in ipairs(obj.FillLines) do
             local t = (i-1)/(#obj.FillLines-1)
             line.From = pos + Vector2.new(s.FillInset, size.Y * t)
             line.To = pos + Vector2.new(size.X - s.FillInset, size.Y * t)
-            line.Color = topColor:Lerp(botColor, t); line.Transparency = smoothPulse * 0.4; line.Visible = true
+            line.Color = topColor:Lerp(botColor, t)
+            line.Transparency = (s.BoxFillTransparency or smoothPulse) * 0.4
+            line.Visible = true
         end
     else
         for _, v in pairs(obj.FillLines) do v.Visible = false end
     end
 
+    -- Matcha Style Rounded Box Construction
     for i = 1, q do
         local t, hP = (i-1)/q, (math.pi*0.5)/q
         local a1, a2 = (i-1)*hP, i*hP

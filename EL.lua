@@ -39,7 +39,7 @@ _G.ESPLibrary = {
         -- BOX & STYLE
         BoxThickness = 1.8,
         CornerRadius = 12,
-        Quality = 8, -- This controls the number of gradient segments
+        Quality = 15, -- Higher quality for smoother gradients as seen in matchav2
         Rounded = true,
         FillEnabled = true,
         FillDensity = 35,
@@ -76,7 +76,7 @@ local function CreateESP(player)
         AllDrawings = {}, 
         FillLines = {},
         L = {}, R = {}, TL = {}, TR = {}, BL = {}, BR = {},
-        -- Gradient Box Arrays
+        -- Gradient segment tables matching matchav2 style
         BoxTop = {},
         BoxBottom = {},
         BoxLeft = {},
@@ -102,7 +102,7 @@ local function CreateESP(player)
         return draw
     end
 
-    -- Initialize Gradient Box Segments based on Quality
+    -- Create gradient segments based on quality setting 
     local q = _G.ESPLibrary.Settings.Quality
     for i = 1, q do
         table.insert(obj.BoxTop, Add(Drawing.new("Line"), 3))
@@ -128,6 +128,7 @@ local function CreateESP(player)
     ESPTable[player] = obj
 end
 
+-- 4. CLEANUP & UTILITY
 local function RemoveESP(player)
     local obj = ESPTable[player]
     if obj then
@@ -173,11 +174,11 @@ local function GetSkeletonJoints(char)
     return joints
 end
 
--- 5. UPDATE ENGINE (With Gradient Box Logic)
+-- 5. UPDATE ENGINE (MATCHAV2 STYLE GRADIENT) 
 local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerName)
     local s = _G.ESPLibrary.Settings
     local botColor = s.BottomColor
-    local q = s.FPSMode and 3 or s.Quality
+    local q = s.Quality
     local r = s.Rounded and math.min(s.CornerRadius, size.X * 0.48, size.Y * 0.48) or 0
     
     local wave = s.PulseEnabled and ((math.sin(tick() * s.PulseSpeed) + 1) / 2) or 1
@@ -268,69 +269,68 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         for _, v in pairs(obj.FillLines) do v.Visible = false end
     end
 
-    --- GRADIENT BOX EDGES ---
-    -- These are the straight parts between corners
+    --- MATCHAV2 GRADIENT BOX IMPLEMENTATION  ---
     for i = 1, q do
         local t = (i - 1) / q
         local nextT = i / q
         local currentLerpColor = topColor:Lerp(botColor, t)
         
-        -- Vertical Sides (Gradient from Top to Bottom)
-        local leftSide = obj.BoxLeft[i]
-        leftSide.From = pos + Vector2.new(0, r + (size.Y - r * 2) * t)
-        leftSide.To = pos + Vector2.new(0, r + (size.Y - r * 2) * nextT)
-        leftSide.Color = currentLerpColor
-        leftSide.Thickness = s.BoxThickness
-        leftSide.Transparency = borderPulse
-        leftSide.Visible = true
+        -- Left Side Gradient
+        local l = obj.BoxLeft[i]
+        l.From = pos + Vector2.new(0, r + (size.Y - r * 2) * t)
+        l.To = pos + Vector2.new(0, r + (size.Y - r * 2) * nextT)
+        l.Color = currentLerpColor
+        l.Thickness = s.BoxThickness
+        l.Transparency = borderPulse
+        l.Visible = true
 
-        local rightSide = obj.BoxRight[i]
-        rightSide.From = pos + Vector2.new(size.X, r + (size.Y - r * 2) * t)
-        rightSide.To = pos + Vector2.new(size.X, r + (size.Y - r * 2) * nextT)
-        rightSide.Color = currentLerpColor
-        rightSide.Thickness = s.BoxThickness
-        rightSide.Transparency = borderPulse
-        rightSide.Visible = true
+        -- Right Side Gradient
+        local ri = obj.BoxRight[i]
+        ri.From = pos + Vector2.new(size.X, r + (size.Y - r * 2) * t)
+        ri.To = pos + Vector2.new(size.X, r + (size.Y - r * 2) * nextT)
+        ri.Color = currentLerpColor
+        ri.Thickness = s.BoxThickness
+        ri.Transparency = borderPulse
+        ri.Visible = true
 
-        -- Horizontal Sides (Solid Top and Solid Bottom color)
-        local topSide = obj.BoxTop[i]
-        topSide.From = pos + Vector2.new(r + (size.X - r * 2) * t, 0)
-        topSide.To = pos + Vector2.new(r + (size.X - r * 2) * nextT, 0)
-        topSide.Color = topColor
-        topSide.Thickness = s.BoxThickness
-        topSide.Transparency = borderPulse
-        topSide.Visible = true
+        -- Top Edge (Solid Top Color)
+        local t_edge = obj.BoxTop[i]
+        t_edge.From = pos + Vector2.new(r + (size.X - r * 2) * t, 0)
+        t_edge.To = pos + Vector2.new(r + (size.X - r * 2) * nextT, 0)
+        t_edge.Color = topColor
+        t_edge.Thickness = s.BoxThickness
+        t_edge.Transparency = borderPulse
+        t_edge.Visible = true
 
-        local botSide = obj.BoxBottom[i]
-        botSide.From = pos + Vector2.new(r + (size.X - r * 2) * t, size.Y)
-        botSide.To = pos + Vector2.new(r + (size.X - r * 2) * nextT, size.Y)
-        botSide.Color = botColor
-        botSide.Thickness = s.BoxThickness
-        botSide.Transparency = borderPulse
-        botSide.Visible = true
+        -- Bottom Edge (Solid Bottom Color)
+        local b_edge = obj.BoxBottom[i]
+        b_edge.From = pos + Vector2.new(r + (size.X - r * 2) * t, size.Y)
+        b_edge.To = pos + Vector2.new(r + (size.X - r * 2) * nextT, size.Y)
+        b_edge.Color = botColor
+        b_edge.Thickness = s.BoxThickness
+        b_edge.Transparency = borderPulse
+        b_edge.Visible = true
     end
 
-    -- ROUNDED CORNERS (Integrated with Gradient logic)
+    -- CORNER ROUNDING
     if s.Rounded then
         for i = 1, 12 do
             local a1, a2 = (i-1)*(math.pi*0.5)/12, i*(math.pi*0.5)/12
             
-            -- Top Left (Solid Top Color)
+            -- Top Corners use Top Color
             obj.TL[i].From = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a1 + math.pi), math.sin(a1 + math.pi)) * r
             obj.TL[i].To = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a2 + math.pi), math.sin(a2 + math.pi)) * r
             obj.TL[i].Color = topColor
             
-            -- Top Right (Solid Top Color)
             obj.TR[i].From = (pos + Vector2.new(size.X - r, r)) + Vector2.new(math.cos(a1 - math.pi/2), math.sin(a1 - math.pi/2)) * r
             obj.TR[i].To = (pos + Vector2.new(size.X - r, r)) + Vector2.new(math.cos(a2 - math.pi/2), math.sin(a2 - math.pi/2)) * r
             obj.TR[i].Color = topColor
             
-            -- Bottom Left (Solid Bottom Color)
+            -- Bottom Corners use Bottom Color
             obj.BL[i].From = (pos + Vector2.new(r, size.Y - r)) + Vector2.new(math.cos(a1 + math.pi/2), math.sin(a1 + math.pi/2)) * r
             obj.BL[i].To = (pos + Vector2.new(r, size.Y - r)) + Vector2.new(math.cos(a2 + math.pi/2), math.sin(a2 + math.pi/2)) * r
             obj.BL[i].Color = botColor
             
-            -- Bottom Right (Solid Bottom Color)
             obj.BR[i].From = (pos + Vector2.new(size.X - r, size.Y - r)) + Vector2.new(math.cos(a1), math.sin(a1)) * r
             obj.BR[i].To = (pos + Vector2.new(size.X - r, size.Y - r)) + Vector2.new(math.cos(a2), math.sin(a2)) * r
             obj.BR[i].Color = botColor
@@ -339,13 +339,12 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
             for _, c in ipairs(corners) do c.Visible = true; c.Thickness = s.BoxThickness; c.Transparency = borderPulse end
         end
     else
-        -- Hide corners if rounding is disabled
         local corners = {"TL", "TR", "BL", "BR"}
         for _, p in ipairs(corners) do for _, d in ipairs(obj[p]) do d.Visible = false end end
     end
 end
 
--- 6. RUNTIME EVENT HANDLERS
+-- 6. RUNTIME HANDLERS
 Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(RemoveESP)
 

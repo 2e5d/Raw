@@ -11,9 +11,12 @@ _G.ESPLibrary = {
         Enabled = true,
         FPSMode = false,
         MaxDistance = 5000,
-        BoxGradientEnabled = true, -- Set to true for the gradient effect
-        BoxGradientColor1 = Color3.new(0.4, 0.35, 0.7), -- Primary Color
-        BoxGradientColor2 = Color3.new(0.8, 0.4, 1.0),  -- Secondary Color
+        
+        -- Box Gradient Settings
+        BoxGradientEnabled = true,
+        BoxGradientColor1 = Color3.new(0.4, 0.35, 0.7),
+        BoxGradientColor2 = Color3.new(0.8, 0.4, 1.0),
+        
         ShowName = true,
         NameSize = 18,
         NameBold = true,
@@ -58,44 +61,6 @@ local ESPTable = {}
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
-
-local EspGui = Instance.new("ScreenGui")
-EspGui.Name = "GradientESP"
-EspGui.ResetOnSpawn = false
-EspGui.Parent = game:GetService("CoreGui") -- Or PlayerGui
-
-local function CreateESP(player)
-    if player == LocalPlayer then return end
-    
-    local obj = {
-        Player = player,
-        FillFrame = Instance.new("Frame"),
-        Gradient = Instance.new("UIGradient"),
-        Stroke = Instance.new("UIStroke")
-    }
-
-    -- Initialize FillFrame [cite: 4, 5]
-    obj.FillFrame.BorderSizePixel = 0
-    obj.FillFrame.BackgroundTransparency = Config.BoxFillTransparency
-    obj.FillFrame.Visible = false
-    obj.FillFrame.Parent = EspGui
-
-    -- Initialize Gradient 
-    obj.Gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Config.BoxGradientColor1),
-        ColorSequenceKeypoint.new(0.5, Config.BoxGradientColor2),
-        ColorSequenceKeypoint.new(1, Config.BoxGradientColor1)
-    })
-    obj.Gradient.Parent = obj.FillFrame
-
-    -- Initialize Outline 
-    obj.Stroke.Thickness = 1.2
-    obj.Stroke.Color = Config.BoxOutlineColor
-    obj.Stroke.Enabled = Config.BoxOutlineEnabled
-    obj.Stroke.Parent = obj.FillFrame
-
-    ESPTable[player] = obj
-end
 local function CreateESP(player)
     if player == LocalPlayer then return end
     if ESPTable[player] then return end
@@ -192,7 +157,9 @@ end
 
 local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerName)
     local s = _G.ESPLibrary.Settings
-    local botColor = s.BottomColor
+    local gCol1 = s.BoxGradientEnabled and s.BoxGradientColor1 or topColor
+    local gCol2 = s.BoxGradientEnabled and s.BoxGradientColor2 or s.BottomColor
+    
     local q = s.FPSMode and 3 or s.Quality
     local r = math.min(s.CornerRadius, size.X * 0.48, size.Y * 0.48)
     
@@ -203,7 +170,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
     obj.Name.Visible = s.ShowName
     if s.ShowName then
         obj.Name.Text = playerName:upper()
-        obj.Name.Color = topColor
+        obj.Name.Color = gCol1
         obj.Name.Size = math.clamp(size.Y * 0.12, 16, s.NameSize)
         obj.Name.Outline = s.NameOutline
         obj.Name.Position = Vector2.new(pos.X + size.X/2, pos.Y - (obj.Name.Size + s.NameHeightOffset))
@@ -213,7 +180,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         obj.Highlight.Enabled = s.ChamsEnabled
         if s.ChamsEnabled then
             obj.Highlight.Parent = char
-            obj.Highlight.FillColor = topColor
+            obj.Highlight.FillColor = gCol1
             obj.Highlight.FillTransparency = math.clamp(1 - (s.ChamsFillTransparency * wave), 0.1, 0.9)
             obj.Highlight.OutlineTransparency = s.ChamsOutline and (1 - borderPulse) or 1
         end
@@ -229,7 +196,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
                 if v1 and v2 then
                     line.From = Vector2.new(p1.X, p1.Y)
                     line.To = Vector2.new(p2.X, p2.Y)
-                    line.Color = topColor; line.Thickness = s.SkeletonThickness; line.Transparency = borderPulse; line.Visible = true
+                    line.Color = gCol1; line.Thickness = s.SkeletonThickness; line.Transparency = borderPulse; line.Visible = true
                 else line.Visible = false end
             else line.Visible = false end
         end
@@ -261,7 +228,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         for i, seg in ipairs(obj.TracerSegments) do
             local tS = (i-1)/#obj.TracerSegments
             seg.From, seg.To = origin + (fullVec * tS), origin + (fullVec * (i/#obj.TracerSegments))
-            seg.Color = botColor:Lerp(topColor, tS); seg.Transparency = smoothPulse; seg.Visible = true
+            seg.Color = gCol2:Lerp(gCol1, tS); seg.Transparency = smoothPulse; seg.Visible = true
         end
     else
         for _, v in pairs(obj.TracerSegments) do v.Visible = false end
@@ -272,7 +239,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
             local t = (i-1)/(#obj.FillLines-1)
             line.From = pos + Vector2.new(s.FillInset, size.Y * t)
             line.To = pos + Vector2.new(size.X - s.FillInset, size.Y * t)
-            line.Color = topColor:Lerp(botColor, t); line.Transparency = smoothPulse * 0.4; line.Visible = true
+            line.Color = gCol1:Lerp(gCol2, t); line.Transparency = smoothPulse * 0.4; line.Visible = true
         end
     else
         for _, v in pairs(obj.FillLines) do v.Visible = false end
@@ -292,11 +259,11 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         obj.BR[i].From = (pos + Vector2.new(size.X - r, size.Y - r)) + Vector2.new(math.cos(a1), math.sin(a1)) * r
         obj.BR[i].To = (pos + Vector2.new(size.X - r, size.Y - r)) + Vector2.new(math.cos(a2), math.sin(a2)) * r
         local group = {obj.L[i], obj.R[i], obj.TL[i], obj.TR[i], obj.BL[i], obj.BR[i]}
-        for _, p in ipairs(group) do p.Transparency = borderPulse; p.Thickness = s.BoxThickness; p.Visible = true; p.Color = topColor:Lerp(botColor, t) end
+        for _, p in ipairs(group) do p.Transparency = borderPulse; p.Thickness = s.BoxThickness; p.Visible = true; p.Color = gCol1:Lerp(gCol2, t) end
     end
     obj.T.From, obj.T.To = pos + Vector2.new(r, 0), pos + Vector2.new(size.X - r, 0)
     obj.B.From, obj.B.To = pos + Vector2.new(r, size.Y), pos + Vector2.new(size.X - r, size.Y)
-    obj.T.Visible = true; obj.B.Visible = true; obj.T.Color = topColor; obj.B.Color = botColor
+    obj.T.Visible = true; obj.B.Visible = true; obj.T.Color = gCol1; obj.B.Color = gCol2
 end
 
 Players.PlayerAdded:Connect(CreateESP)

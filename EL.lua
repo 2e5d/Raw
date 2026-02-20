@@ -39,11 +39,13 @@ _G.ESPLibrary = {
         -- BOX & STYLE
         BoxThickness = 1.8,
         CornerRadius = 12,
-        Quality = 15, -- Higher quality for smoother gradients as seen in matchav2
+        Quality = 15, 
         Rounded = true,
+        
+        -- FILL SETTINGS (Matchav2 Style)
         FillEnabled = true,
-        FillDensity = 35,
-        FillInset = 2,
+        FillDensity = 40, -- Higher density for smoother gradient fill
+        FillInset = 1,
         
         -- TRACERS
         ShowTracer = true,
@@ -53,7 +55,7 @@ _G.ESPLibrary = {
         PulseEnabled = true,
         PulseSpeed = 2.5,
         MinTransparency = 0.1,
-        MaxTransparency = 0.5,
+        MaxTransparency = 0.4,
         
         -- COLORS
         BottomColor = Color3.fromRGB(0, 0, 0),
@@ -76,12 +78,10 @@ local function CreateESP(player)
         AllDrawings = {}, 
         FillLines = {},
         L = {}, R = {}, TL = {}, TR = {}, BL = {}, BR = {},
-        -- Gradient segment tables matching matchav2 style
         BoxTop = {},
         BoxBottom = {},
         BoxLeft = {},
         BoxRight = {},
-        
         Name = Drawing.new("Text"), 
         HealthBack = Drawing.new("Line"),
         HealthSegments = {},
@@ -102,13 +102,18 @@ local function CreateESP(player)
         return draw
     end
 
-    -- Create gradient segments based on quality setting 
+    -- Box Segments
     local q = _G.ESPLibrary.Settings.Quality
     for i = 1, q do
         table.insert(obj.BoxTop, Add(Drawing.new("Line"), 3))
         table.insert(obj.BoxBottom, Add(Drawing.new("Line"), 3))
         table.insert(obj.BoxLeft, Add(Drawing.new("Line"), 3))
         table.insert(obj.BoxRight, Add(Drawing.new("Line"), 3))
+    end
+
+    -- Fill Segments (Gradient Style)
+    for i = 1, _G.ESPLibrary.Settings.FillDensity do
+        table.insert(obj.FillLines, Add(Drawing.new("Line"), 1))
     end
 
     Add(obj.HealthBack, 1)
@@ -118,7 +123,6 @@ local function CreateESP(player)
     for i = 1, 20 do table.insert(obj.SkeletonSegments, Add(Drawing.new("Line"), 2)) end
     for i = 1, 10 do table.insert(obj.TracerSegments, Add(Drawing.new("Line"), 1)) end
     for i = 1, 30 do table.insert(obj.HealthSegments, Add(Drawing.new("Line"), 2)) end
-    for i = 1, _G.ESPLibrary.Settings.FillDensity do table.insert(obj.FillLines, Add(Drawing.new("Line"), 1)) end
 
     local parts = {"L", "R", "TL", "TR", "BL", "BR"}
     for _, p in ipairs(parts) do
@@ -128,7 +132,6 @@ local function CreateESP(player)
     ESPTable[player] = obj
 end
 
--- 4. CLEANUP & UTILITY
 local function RemoveESP(player)
     local obj = ESPTable[player]
     if obj then
@@ -174,7 +177,7 @@ local function GetSkeletonJoints(char)
     return joints
 end
 
--- 5. UPDATE ENGINE (MATCHAV2 STYLE GRADIENT) 
+-- 5. UPDATE ENGINE
 local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerName)
     local s = _G.ESPLibrary.Settings
     local botColor = s.BottomColor
@@ -257,67 +260,56 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         for _, v in pairs(obj.TracerSegments) do v.Visible = false end
     end
 
-    -- FILL LINES
+    -- GRADIENT FILL (Updated to Matchav2 Style)
     if s.FillEnabled and not s.FPSMode then
+        local fillCount = #obj.FillLines
         for i, line in ipairs(obj.FillLines) do
-            local t = (i-1)/(#obj.FillLines-1)
+            local t = (i - 1) / (fillCount - 1)
+            -- Vertical stacking lines for gradient effect
             line.From = pos + Vector2.new(s.FillInset, size.Y * t)
             line.To = pos + Vector2.new(size.X - s.FillInset, size.Y * t)
-            line.Color = topColor:Lerp(botColor, t); line.Transparency = smoothPulse * 0.4; line.Visible = true
+            line.Color = topColor:Lerp(botColor, t)
+            line.Transparency = smoothPulse * 0.5 -- Pulses with the box
+            line.Thickness = (size.Y / fillCount) + 1 -- Overlaps slightly to prevent gaps
+            line.Visible = true
         end
     else
         for _, v in pairs(obj.FillLines) do v.Visible = false end
     end
 
-    --- MATCHAV2 GRADIENT BOX IMPLEMENTATION  ---
+    -- GRADIENT BOX BORDERS
     for i = 1, q do
         local t = (i - 1) / q
         local nextT = i / q
         local currentLerpColor = topColor:Lerp(botColor, t)
         
-        -- Left Side Gradient
         local l = obj.BoxLeft[i]
         l.From = pos + Vector2.new(0, r + (size.Y - r * 2) * t)
         l.To = pos + Vector2.new(0, r + (size.Y - r * 2) * nextT)
         l.Color = currentLerpColor
-        l.Thickness = s.BoxThickness
-        l.Transparency = borderPulse
-        l.Visible = true
+        l.Thickness = s.BoxThickness; l.Transparency = borderPulse; l.Visible = true
 
-        -- Right Side Gradient
         local ri = obj.BoxRight[i]
         ri.From = pos + Vector2.new(size.X, r + (size.Y - r * 2) * t)
         ri.To = pos + Vector2.new(size.X, r + (size.Y - r * 2) * nextT)
         ri.Color = currentLerpColor
-        ri.Thickness = s.BoxThickness
-        ri.Transparency = borderPulse
-        ri.Visible = true
+        ri.Thickness = s.BoxThickness; ri.Transparency = borderPulse; ri.Visible = true
 
-        -- Top Edge (Solid Top Color)
         local t_edge = obj.BoxTop[i]
         t_edge.From = pos + Vector2.new(r + (size.X - r * 2) * t, 0)
         t_edge.To = pos + Vector2.new(r + (size.X - r * 2) * nextT, 0)
-        t_edge.Color = topColor
-        t_edge.Thickness = s.BoxThickness
-        t_edge.Transparency = borderPulse
-        t_edge.Visible = true
+        t_edge.Color = topColor; t_edge.Thickness = s.BoxThickness; t_edge.Transparency = borderPulse; t_edge.Visible = true
 
-        -- Bottom Edge (Solid Bottom Color)
         local b_edge = obj.BoxBottom[i]
         b_edge.From = pos + Vector2.new(r + (size.X - r * 2) * t, size.Y)
         b_edge.To = pos + Vector2.new(r + (size.X - r * 2) * nextT, size.Y)
-        b_edge.Color = botColor
-        b_edge.Thickness = s.BoxThickness
-        b_edge.Transparency = borderPulse
-        b_edge.Visible = true
+        b_edge.Color = botColor; b_edge.Thickness = s.BoxThickness; b_edge.Transparency = borderPulse; b_edge.Visible = true
     end
 
     -- CORNER ROUNDING
     if s.Rounded then
         for i = 1, 12 do
             local a1, a2 = (i-1)*(math.pi*0.5)/12, i*(math.pi*0.5)/12
-            
-            -- Top Corners use Top Color
             obj.TL[i].From = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a1 + math.pi), math.sin(a1 + math.pi)) * r
             obj.TL[i].To = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a2 + math.pi), math.sin(a2 + math.pi)) * r
             obj.TL[i].Color = topColor
@@ -326,7 +318,6 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
             obj.TR[i].To = (pos + Vector2.new(size.X - r, r)) + Vector2.new(math.cos(a2 - math.pi/2), math.sin(a2 - math.pi/2)) * r
             obj.TR[i].Color = topColor
             
-            -- Bottom Corners use Bottom Color
             obj.BL[i].From = (pos + Vector2.new(r, size.Y - r)) + Vector2.new(math.cos(a1 + math.pi/2), math.sin(a1 + math.pi/2)) * r
             obj.BL[i].To = (pos + Vector2.new(r, size.Y - r)) + Vector2.new(math.cos(a2 + math.pi/2), math.sin(a2 + math.pi/2)) * r
             obj.BL[i].Color = botColor

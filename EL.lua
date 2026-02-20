@@ -1,7 +1,4 @@
---[[
-    GEMINI ESP LIBRARY - STABLE OLD BOX VERSION
-    Features: Rounded Boxes, Segmented Health, Chams, Skeleton, and Stability Fixes.
-]]
+
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")

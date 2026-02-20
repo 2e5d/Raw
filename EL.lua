@@ -35,12 +35,11 @@ _G.ESPLibrary = {
         Quality = 12,
         Rounded = true,
         
-        -- Matcha Gradient/Fill Settings
-        BoxGradientEnabled = true,
+        -- Granit (Seamless Gradient) Settings
         FillEnabled = true,
-        FillDensity = 45,
-        FillInset = 2,
-        BoxFillTransparency = 0.5,
+        FillDensity = 100, -- High density for invisible color changes
+        FillInset = 1,
+        BoxFillTransparency = 0.35,
         
         ShowTracer = true,
         TracerOrigin = "Bottom",
@@ -100,7 +99,6 @@ local function CreateESP(player)
     for i = 1, 10 do table.insert(obj.TracerSegments, Add(Drawing.new("Line"), 1)) end
     for i = 1, 30 do table.insert(obj.HealthSegments, Add(Drawing.new("Line"), 2)) end
     
-    -- Initialize Fill Lines for Matcha Gradient Effect
     for i = 1, _G.ESPLibrary.Settings.FillDensity do 
         table.insert(obj.FillLines, Add(Drawing.new("Line"), 1)) 
     end
@@ -168,6 +166,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
     local smoothPulse = s.MinTransparency + (s.MaxTransparency - s.MinTransparency) * wave
     local borderPulse = math.clamp(smoothPulse + 0.35, 0.5, 1)
 
+    -- Name
     obj.Name.Visible = s.ShowName
     if s.ShowName then
         obj.Name.Text = playerName:upper()
@@ -177,6 +176,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         obj.Name.Position = Vector2.new(pos.X + size.X/2, pos.Y - (obj.Name.Size + s.NameHeightOffset))
     end
 
+    -- Chams
     if obj.Highlight then
         obj.Highlight.Enabled = s.ChamsEnabled
         if s.ChamsEnabled then
@@ -187,6 +187,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         end
     end
 
+    -- Skeleton
     if s.ShowSkeleton then
         local connections = GetSkeletonJoints(char)
         for i, line in ipairs(obj.SkeletonSegments) do
@@ -205,6 +206,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         for _, v in pairs(obj.SkeletonSegments) do v.Visible = false end
     end
 
+    -- Health
     if s.ShowHealth then
         local barH = size.Y * s.HealthBarHeightScale
         local barOffset = pos - Vector2.new(s.HealthBarOffset, 0)
@@ -224,6 +226,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         for _, v in pairs(obj.HealthSegments) do v.Visible = false end
     end
 
+    -- Tracer
     if s.ShowTracer then
         local origin = s.TracerOrigin == "Bottom" and Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y) or Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
         local fullVec = (pos + size/2) - origin
@@ -236,21 +239,23 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         for _, v in pairs(obj.TracerSegments) do v.Visible = false end
     end
 
-    -- Matcha Style Fill/Gradient Implementation
+    -- Seamless Fill (The Granit Logic)
     if s.FillEnabled and not s.FPSMode then
+        local thickness = (size.Y / #obj.FillLines) + 0.6 -- Slight overlap to hide edges
         for i, line in ipairs(obj.FillLines) do
             local t = (i-1)/(#obj.FillLines-1)
             line.From = pos + Vector2.new(s.FillInset, size.Y * t)
             line.To = pos + Vector2.new(size.X - s.FillInset, size.Y * t)
             line.Color = topColor:Lerp(botColor, t)
-            line.Transparency = (s.BoxFillTransparency or smoothPulse) * 0.4
+            line.Transparency = s.BoxFillTransparency
+            line.Thickness = thickness
             line.Visible = true
         end
     else
         for _, v in pairs(obj.FillLines) do v.Visible = false end
     end
 
-    -- Matcha Style Rounded Box Construction
+    -- Rounded Box Construction
     for i = 1, q do
         local t, hP = (i-1)/q, (math.pi*0.5)/q
         local a1, a2 = (i-1)*hP, i*hP
@@ -275,17 +280,11 @@ end
 Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(RemoveESP)
 
-for _, p in ipairs(Players:GetPlayers()) do
-    CreateESP(p)
-end
+for _, p in ipairs(Players:GetPlayers()) do CreateESP(p) end
 
 local Connection = RunService.RenderStepped:Connect(function()
     local s = _G.ESPLibrary.Settings
-    if not s.Enabled then
-        for _, obj in pairs(ESPTable) do SetVisible(obj, false) end
-        return
-    end
-
+    if not s.Enabled then for _, obj in pairs(ESPTable) do SetVisible(obj, false) end return end
     for player, obj in pairs(ESPTable) do
         local char = player.Character
         if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
@@ -305,9 +304,7 @@ end)
 
 _G.ESP_Cleanup = function()
     Connection:Disconnect()
-    for player, _ in pairs(ESPTable) do
-        RemoveESP(player)
-    end
+    for player, _ in pairs(ESPTable) do RemoveESP(player) end
     table.clear(ESPTable)
 end
 

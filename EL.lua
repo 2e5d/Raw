@@ -35,11 +35,9 @@ _G.ESPLibrary = {
         Quality = 12,
         Rounded = true,
         
-        -- Granit (Seamless Gradient) Settings
+        -- GUI Seamless Gradient Settings
         FillEnabled = true,
-        FillDensity = 100, -- High density for invisible color changes
-        FillInset = 1,
-        BoxFillTransparency = 0.35,
+        BoxFillTransparency = 0.4,
         
         ShowTracer = true,
         TracerOrigin = "Bottom",
@@ -59,6 +57,12 @@ local ESPTable = {}
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
+-- GUI Container for smooth fills
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ESPFills"
+ScreenGui.DisplayOrder = -1
+ScreenGui.Parent = game:GetService("CoreGui")
+
 local function CreateESP(player)
     if player == LocalPlayer then return end
     if ESPTable[player] then return end
@@ -66,7 +70,7 @@ local function CreateESP(player)
     local obj = {
         Player = player,
         AllDrawings = {}, 
-        FillLines = {},
+        -- Drawing parts
         L = {}, R = {}, TL = {}, TR = {}, BL = {}, BR = {},
         T = Drawing.new("Line"),
         B = Drawing.new("Line"),
@@ -75,13 +79,25 @@ local function CreateESP(player)
         HealthSegments = {},
         TracerSegments = {},
         SkeletonSegments = {},
-        Highlight = nil 
+        -- GUI parts for smooth fill
+        FillFrame = Instance.new("Frame"),
+        FillGradient = Instance.new("UIGradient"),
+        Highlight = Instance.new("Highlight")
     }
 
-    local hl = Instance.new("Highlight")
-    hl.Name = "Fluid_Chams"
-    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    obj.Highlight = hl
+    -- Setup Highlight
+    obj.Highlight.Name = "Fluid_Chams"
+    obj.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+
+    -- Setup GUI Fill (The Granit)
+    obj.FillFrame.BorderSizePixel = 0
+    obj.FillFrame.BackgroundTransparency = 1
+    obj.FillFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+    obj.FillFrame.Visible = false
+    obj.FillFrame.Parent = ScreenGui
+
+    obj.FillGradient.Rotation = 90
+    obj.FillGradient.Parent = obj.FillFrame
 
     local function Add(draw, z)
         draw.ZIndex = z
@@ -98,10 +114,6 @@ local function CreateESP(player)
     for i = 1, 20 do table.insert(obj.SkeletonSegments, Add(Drawing.new("Line"), 2)) end
     for i = 1, 10 do table.insert(obj.TracerSegments, Add(Drawing.new("Line"), 1)) end
     for i = 1, 30 do table.insert(obj.HealthSegments, Add(Drawing.new("Line"), 2)) end
-    
-    for i = 1, _G.ESPLibrary.Settings.FillDensity do 
-        table.insert(obj.FillLines, Add(Drawing.new("Line"), 1)) 
-    end
 
     local parts = {"L", "R", "TL", "TR", "BL", "BR"}
     for _, p in ipairs(parts) do
@@ -115,6 +127,7 @@ local function RemoveESP(player)
     local obj = ESPTable[player]
     if obj then
         if obj.Highlight then obj.Highlight:Destroy() end
+        if obj.FillFrame then obj.FillFrame:Destroy() end
         for _, d in ipairs(obj.AllDrawings) do
             d.Visible = false
             d:Remove()
@@ -126,6 +139,7 @@ end
 local function SetVisible(obj, state)
     for i = 1, #obj.AllDrawings do obj.AllDrawings[i].Visible = state end
     if obj.Highlight then obj.Highlight.Enabled = state end
+    if obj.FillFrame then obj.FillFrame.Visible = state and _G.ESPLibrary.Settings.FillEnabled end
 end
 
 local function GetSkeletonJoints(char)
@@ -166,6 +180,21 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
     local smoothPulse = s.MinTransparency + (s.MaxTransparency - s.MinTransparency) * wave
     local borderPulse = math.clamp(smoothPulse + 0.35, 0.5, 1)
 
+    -- GUI Fill Update (The Smooth Granit)
+    if s.FillEnabled then
+        obj.FillFrame.Visible = true
+        obj.FillFrame.Position = UDim2.new(0, pos.X, 0, pos.Y)
+        obj.FillFrame.Size = UDim2.new(0, size.X, 0, size.Y)
+        obj.FillFrame.BackgroundTransparency = 1 - (s.BoxFillTransparency * wave)
+        
+        obj.FillGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, topColor),
+            ColorSequenceKeypoint.new(1, botColor)
+        })
+    else
+        obj.FillFrame.Visible = false
+    end
+
     -- Name
     obj.Name.Visible = s.ShowName
     if s.ShowName then
@@ -179,12 +208,10 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
     -- Chams
     if obj.Highlight then
         obj.Highlight.Enabled = s.ChamsEnabled
-        if s.ChamsEnabled then
-            obj.Highlight.Parent = char
-            obj.Highlight.FillColor = topColor
-            obj.Highlight.FillTransparency = math.clamp(1 - (s.ChamsFillTransparency * wave), 0.1, 0.9)
-            obj.Highlight.OutlineTransparency = s.ChamsOutline and (1 - borderPulse) or 1
-        end
+        obj.Highlight.Parent = char
+        obj.Highlight.FillColor = topColor
+        obj.Highlight.FillTransparency = math.clamp(1 - (s.ChamsFillTransparency * wave), 0.1, 0.9)
+        obj.Highlight.OutlineTransparency = s.ChamsOutline and (1 - borderPulse) or 1
     end
 
     -- Skeleton
@@ -196,8 +223,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
                 local p1, v1 = Camera:WorldToViewportPoint(pair[1].Position)
                 local p2, v2 = Camera:WorldToViewportPoint(pair[2].Position)
                 if v1 and v2 then
-                    line.From = Vector2.new(p1.X, p1.Y)
-                    line.To = Vector2.new(p2.X, p2.Y)
+                    line.From = Vector2.new(p1.X, p1.Y); line.To = Vector2.new(p2.X, p2.Y)
                     line.Color = topColor; line.Thickness = s.SkeletonThickness; line.Transparency = borderPulse; line.Visible = true
                 else line.Visible = false end
             else line.Visible = false end
@@ -211,8 +237,7 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         local barH = size.Y * s.HealthBarHeightScale
         local barOffset = pos - Vector2.new(s.HealthBarOffset, 0)
         obj.HealthBack.From = barOffset; obj.HealthBack.To = barOffset + Vector2.new(0, barH)
-        obj.HealthBack.Thickness = s.HealthBarWidth + 1.5; obj.HealthBack.Color = Color3.new(0,0,0); obj.HealthBack.Transparency = 0.5
-        obj.HealthBack.Visible = true
+        obj.HealthBack.Thickness = s.HealthBarWidth + 1.5; obj.HealthBack.Color = Color3.new(0,0,0); obj.HealthBack.Transparency = 0.5; obj.HealthBack.Visible = true
         for i, seg in ipairs(obj.HealthSegments) do
             local tS = (i - 1) / #obj.HealthSegments
             if tS < healthPercent then
@@ -239,22 +264,6 @@ local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerNa
         for _, v in pairs(obj.TracerSegments) do v.Visible = false end
     end
 
-    -- Seamless Fill (The Granit Logic)
-    if s.FillEnabled and not s.FPSMode then
-        local thickness = (size.Y / #obj.FillLines) + 0.6 -- Slight overlap to hide edges
-        for i, line in ipairs(obj.FillLines) do
-            local t = (i-1)/(#obj.FillLines-1)
-            line.From = pos + Vector2.new(s.FillInset, size.Y * t)
-            line.To = pos + Vector2.new(size.X - s.FillInset, size.Y * t)
-            line.Color = topColor:Lerp(botColor, t)
-            line.Transparency = s.BoxFillTransparency
-            line.Thickness = thickness
-            line.Visible = true
-        end
-    else
-        for _, v in pairs(obj.FillLines) do v.Visible = false end
-    end
-
     -- Rounded Box Construction
     for i = 1, q do
         local t, hP = (i-1)/q, (math.pi*0.5)/q
@@ -279,7 +288,6 @@ end
 
 Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(RemoveESP)
-
 for _, p in ipairs(Players:GetPlayers()) do CreateESP(p) end
 
 local Connection = RunService.RenderStepped:Connect(function()
@@ -304,6 +312,7 @@ end)
 
 _G.ESP_Cleanup = function()
     Connection:Disconnect()
+    ScreenGui:Destroy()
     for player, _ in pairs(ESPTable) do RemoveESP(player) end
     table.clear(ESPTable)
 end

@@ -11,7 +11,9 @@ _G.ESPLibrary = {
         Enabled = true,
         FPSMode = false,
         MaxDistance = 5000,
-        
+        BoxGradientEnabled = true, -- Set to true for the gradient effect
+        BoxGradientColor1 = Color3.new(0.4, 0.35, 0.7), -- Primary Color
+        BoxGradientColor2 = Color3.new(0.8, 0.4, 1.0),  -- Secondary Color
         ShowName = true,
         NameSize = 18,
         NameBold = true,
@@ -56,6 +58,44 @@ local ESPTable = {}
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
+
+local EspGui = Instance.new("ScreenGui")
+EspGui.Name = "GradientESP"
+EspGui.ResetOnSpawn = false
+EspGui.Parent = game:GetService("CoreGui") -- Or PlayerGui
+
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    
+    local obj = {
+        Player = player,
+        FillFrame = Instance.new("Frame"),
+        Gradient = Instance.new("UIGradient"),
+        Stroke = Instance.new("UIStroke")
+    }
+
+    -- Initialize FillFrame [cite: 4, 5]
+    obj.FillFrame.BorderSizePixel = 0
+    obj.FillFrame.BackgroundTransparency = Config.BoxFillTransparency
+    obj.FillFrame.Visible = false
+    obj.FillFrame.Parent = EspGui
+
+    -- Initialize Gradient 
+    obj.Gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Config.BoxGradientColor1),
+        ColorSequenceKeypoint.new(0.5, Config.BoxGradientColor2),
+        ColorSequenceKeypoint.new(1, Config.BoxGradientColor1)
+    })
+    obj.Gradient.Parent = obj.FillFrame
+
+    -- Initialize Outline 
+    obj.Stroke.Thickness = 1.2
+    obj.Stroke.Color = Config.BoxOutlineColor
+    obj.Stroke.Enabled = Config.BoxOutlineEnabled
+    obj.Stroke.Parent = obj.FillFrame
+
+    ESPTable[player] = obj
+end
 local function CreateESP(player)
     if player == LocalPlayer then return end
     if ESPTable[player] then return end

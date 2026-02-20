@@ -12,55 +12,26 @@ _G.ESPLibrary = {
     Settings = {
         Enabled = true,
         FPSMode = false,
-        MaxDistance = 2500,
+        MaxDistance = 1000, -- Matches ESPDistance [cite: 260]
         
-        -- NAMES
+        -- BOX GRADIENT (From Matchav2)
+        BoxGradientEnabled = true, -- Set to true for the new style [cite: 281]
+        BoxGradientColor1 = Color3.new(0.403922, 0.34902, 0.701961), -- [cite: 195]
+        BoxGradientColor2 = Color3.new(0.8, 0.4, 1), -- [cite: 195]
+        BoxFillTransparency = 0.5, -- [cite: 282]
+        
+        -- BORDERS
+        BoxOutlineEnabled = true, -- [cite: 284]
+        BoxOutlineColor = Color3.new(0, 0, 0), -- [cite: 195]
+        BoxThickness = 1.2, -- Matches Stroke Thickness 
+        
+        -- NAMES & HEALTH
         ShowName = true,
-        NameSize = 20,
-        NameBold = true,
-        NameOutline = true,
-        NameHeightOffset = 15,
-        
-        -- CHAMS
-        ChamsEnabled = true,
-        ChamsOutline = true,
-        ChamsFillTransparency = 0.5,
-        
-        -- SKELETON
-        ShowSkeleton = true,
-        SkeletonThickness = 1.5,
-        
-        -- HEALTH
         ShowHealth = true,
-        HealthBarWidth = 2.5,
-        HealthBarOffset = 5,
-        HealthBarHeightScale = 1,
-        
-        -- BOX & STYLE
-        BoxThickness = 1.8,
-        CornerRadius = 12,
-        Quality = 15, 
-        Rounded = true,
-        
-        -- FILL SETTINGS (Matchav2 Style)
-        FillEnabled = true,
-        FillDensity = 40, -- Higher density for smoother gradient fill
-        FillInset = 1,
-        
-        -- TRACERS
-        ShowTracer = true,
-        TracerOrigin = "Bottom",
-        
-        -- EFFECTS
-        PulseEnabled = true,
-        PulseSpeed = 2.5,
-        MinTransparency = 0.1,
-        MaxTransparency = 0.4,
-        
-        -- COLORS
-        BottomColor = Color3.fromRGB(0, 0, 0),
-        HealthHigh = Color3.fromRGB(0, 255, 180),
-        HealthLow = Color3.fromRGB(255, 30, 30),
+        HealthBarLerpSpeed = 0.2, -- [cite: 277]
+        HealthBarColor1 = Color3.fromRGB(0, 255, 0),
+        HealthBarColor2 = Color3.fromRGB(255, 255, 0),
+        HealthBarColor3 = Color3.fromRGB(255, 0, 0),
     }
 }
 
@@ -68,66 +39,54 @@ local ESPTable = {}
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
+-- UI Parent for Gradient Frames
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "Matcha_ESP_Layer"
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+
 -- 3. DRAWING CONSTRUCTOR
 local function CreateESP(player)
     if player == LocalPlayer then return end
     if ESPTable[player] then return end
 
+    -- GUI based elements for the Fill
+    local fillFrame = Instance.new("Frame")
+    fillFrame.BorderSizePixel = 0
+    fillFrame.BackgroundTransparency = 1
+    fillFrame.Visible = false
+    fillFrame.Parent = ScreenGui
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, _G.ESPLibrary.Settings.BoxGradientColor1),
+        ColorSequenceKeypoint.new(0.5, _G.ESPLibrary.Settings.BoxGradientColor2),
+        ColorSequenceKeypoint.new(1, _G.ESPLibrary.Settings.BoxGradientColor1)
+    })
+    gradient.Parent = fillFrame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = _G.ESPLibrary.Settings.BoxThickness
+    stroke.Color = _G.ESPLibrary.Settings.BoxOutlineColor
+    stroke.Enabled = _G.ESPLibrary.Settings.BoxOutlineEnabled
+    stroke.Parent = fillFrame
+
     local obj = {
         Player = player,
-        AllDrawings = {}, 
-        FillLines = {},
-        L = {}, R = {}, TL = {}, TR = {}, BL = {}, BR = {},
-        BoxTop = {},
-        BoxBottom = {},
-        BoxLeft = {},
-        BoxRight = {},
-        Name = Drawing.new("Text"), 
+        FillFrame = fillFrame,
+        Gradient = gradient,
+        Stroke = stroke,
+        Name = Drawing.new("Text"),
+        HealthBar = Drawing.new("Line"),
         HealthBack = Drawing.new("Line"),
-        HealthSegments = {},
-        TracerSegments = {},
-        SkeletonSegments = {},
-        Highlight = nil 
+        CurrentHealth = 100,
+        TargetHealth = 100
     }
 
-    local hl = Instance.new("Highlight")
-    hl.Name = "Gemini_Chams"
-    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    obj.Highlight = hl
-
-    local function Add(draw, z)
-        draw.ZIndex = z
-        draw.Visible = false
-        table.insert(obj.AllDrawings, draw)
-        return draw
-    end
-
-    -- Box Segments
-    local q = _G.ESPLibrary.Settings.Quality
-    for i = 1, q do
-        table.insert(obj.BoxTop, Add(Drawing.new("Line"), 3))
-        table.insert(obj.BoxBottom, Add(Drawing.new("Line"), 3))
-        table.insert(obj.BoxLeft, Add(Drawing.new("Line"), 3))
-        table.insert(obj.BoxRight, Add(Drawing.new("Line"), 3))
-    end
-
-    -- Fill Segments (Gradient Style)
-    for i = 1, _G.ESPLibrary.Settings.FillDensity do
-        table.insert(obj.FillLines, Add(Drawing.new("Line"), 1))
-    end
-
-    Add(obj.HealthBack, 1)
     obj.Name.Center = true
-    Add(obj.Name, 20)
-
-    for i = 1, 20 do table.insert(obj.SkeletonSegments, Add(Drawing.new("Line"), 2)) end
-    for i = 1, 10 do table.insert(obj.TracerSegments, Add(Drawing.new("Line"), 1)) end
-    for i = 1, 30 do table.insert(obj.HealthSegments, Add(Drawing.new("Line"), 2)) end
-
-    local parts = {"L", "R", "TL", "TR", "BL", "BR"}
-    for _, p in ipairs(parts) do
-        for i = 1, 12 do table.insert(obj[p], Add(Drawing.new("Line"), 3)) end
-    end
+    obj.Name.Outline = true
+    obj.Name.Size = 13 -- [cite: 237]
+    obj.Name.Font = 2 -- [cite: 238]
 
     ESPTable[player] = obj
 end
@@ -135,244 +94,107 @@ end
 local function RemoveESP(player)
     local obj = ESPTable[player]
     if obj then
-        if obj.Highlight then obj.Highlight:Destroy() end
-        for _, d in ipairs(obj.AllDrawings) do
-            d.Visible = false
-            d:Remove()
-        end
+        obj.FillFrame:Destroy()
+        obj.Name:Remove()
+        obj.HealthBar:Remove()
+        obj.HealthBack:Remove()
         ESPTable[player] = nil
     end
 end
 
-local function SetVisible(obj, state)
-    for i = 1, #obj.AllDrawings do obj.AllDrawings[i].Visible = state end
-    if obj.Highlight then obj.Highlight.Enabled = state end
-end
-
-local function GetSkeletonJoints(char)
-    local joints = {}
-    local isR15 = char:FindFirstChild("UpperTorso") ~= nil
-    if isR15 then
-        joints = {
-            {char:FindFirstChild("Head"), char:FindFirstChild("UpperTorso")},
-            {char:FindFirstChild("UpperTorso"), char:FindFirstChild("LowerTorso")},
-            {char:FindFirstChild("UpperTorso"), char:FindFirstChild("LeftUpperArm")},
-            {char:FindFirstChild("LeftUpperArm"), char:FindFirstChild("LeftLowerArm")},
-            {char:FindFirstChild("UpperTorso"), char:FindFirstChild("RightUpperArm")},
-            {char:FindFirstChild("RightUpperArm"), char:FindFirstChild("RightLowerArm")},
-            {char:FindFirstChild("LowerTorso"), char:FindFirstChild("LeftUpperLeg")},
-            {char:FindFirstChild("LeftUpperLeg"), char:FindFirstChild("LeftLowerLeg")},
-            {char:FindFirstChild("LowerTorso"), char:FindFirstChild("RightUpperLeg")},
-            {char:FindFirstChild("RightUpperLeg"), char:FindFirstChild("RightLowerLeg")}
-        }
-    else
-        joints = {
-            {char:FindFirstChild("Head"), char:FindFirstChild("Torso")},
-            {char:FindFirstChild("Torso"), char:FindFirstChild("Left Arm")},
-            {char:FindFirstChild("Torso"), char:FindFirstChild("Right Arm")},
-            {char:FindFirstChild("Torso"), char:FindFirstChild("Left Leg")},
-            {char:FindFirstChild("Torso"), char:FindFirstChild("Right Leg")}
-        }
-    end
-    return joints
-end
-
--- 5. UPDATE ENGINE
-local function UpdateESP(obj, pos, size, topColor, healthPercent, char, playerName)
+-- 4. UPDATE ENGINE
+local function UpdateESP(obj, player, char)
     local s = _G.ESPLibrary.Settings
-    local botColor = s.BottomColor
-    local q = s.Quality
-    local r = s.Rounded and math.min(s.CornerRadius, size.X * 0.48, size.Y * 0.48) or 0
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    local head = char:FindFirstChild("Head")
     
-    local wave = s.PulseEnabled and ((math.sin(tick() * s.PulseSpeed) + 1) / 2) or 1
-    local smoothPulse = s.MinTransparency + (s.MaxTransparency - s.MinTransparency) * wave
-    local borderPulse = math.clamp(smoothPulse + 0.35, 0.5, 1)
-
-    -- NAMES
-    obj.Name.Visible = s.ShowName
-    if s.ShowName then
-        obj.Name.Text = playerName:upper()
-        obj.Name.Color = topColor
-        obj.Name.Size = math.clamp(size.Y * 0.12, 16, s.NameSize)
-        obj.Name.Outline = s.NameOutline
-        obj.Name.Position = Vector2.new(pos.X + size.X/2, pos.Y - (obj.Name.Size + s.NameHeightOffset))
+    if not (hrp and hum and head) then 
+        obj.FillFrame.Visible = false
+        obj.Name.Visible = false
+        return 
     end
 
-    -- CHAMS
-    if obj.Highlight then
-        obj.Highlight.Enabled = s.ChamsEnabled
-        if s.ChamsEnabled then
-            obj.Highlight.Parent = char
-            obj.Highlight.FillColor = topColor
-            obj.Highlight.FillTransparency = math.clamp(1 - (s.ChamsFillTransparency * wave), 0.1, 0.9)
-            obj.Highlight.OutlineTransparency = s.ChamsOutline and (1 - borderPulse) or 1
-        end
-    end
-
-    -- SKELETON
-    if s.ShowSkeleton then
-        local connections = GetSkeletonJoints(char)
-        for i, line in ipairs(obj.SkeletonSegments) do
-            local pair = connections[i]
-            if pair and pair[1] and pair[2] then
-                local p1, v1 = Camera:WorldToViewportPoint(pair[1].Position)
-                local p2, v2 = Camera:WorldToViewportPoint(pair[2].Position)
-                if v1 and v2 then
-                    line.From = Vector2.new(p1.X, p1.Y)
-                    line.To = Vector2.new(p2.X, p2.Y)
-                    line.Color = topColor; line.Thickness = s.SkeletonThickness; line.Transparency = borderPulse; line.Visible = true
-                else line.Visible = false end
-            else line.Visible = false end
-        end
-    else
-        for _, v in pairs(obj.SkeletonSegments) do v.Visible = false end
-    end
-
-    -- HEALTH BAR
-    obj.HealthBack.Visible = s.ShowHealth
-    if s.ShowHealth then
-        local barH = size.Y * s.HealthBarHeightScale
-        local barOffset = pos - Vector2.new(s.HealthBarOffset, 0)
-        obj.HealthBack.From = barOffset; obj.HealthBack.To = barOffset + Vector2.new(0, barH)
-        obj.HealthBack.Thickness = s.HealthBarWidth + 1.5; obj.HealthBack.Color = Color3.new(0,0,0); obj.HealthBack.Transparency = 0.5
-        for i, seg in ipairs(obj.HealthSegments) do
-            local tS = (i - 1) / #obj.HealthSegments
-            if tS < healthPercent then
-                seg.From = barOffset + Vector2.new(0, barH - (barH * tS))
-                seg.To = barOffset + Vector2.new(0, barH - (barH * math.min(i / #obj.HealthSegments, healthPercent)))
-                seg.Color = s.HealthLow:Lerp(s.HealthHigh, tS); seg.Visible = true; seg.Thickness = s.HealthBarWidth
-            else seg.Visible = false end
-        end
-    else
-        for _, v in pairs(obj.HealthSegments) do v.Visible = false end
-    end
-
-    -- TRACERS
-    if s.ShowTracer then
-        local origin = s.TracerOrigin == "Bottom" and Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y) or Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-        local fullVec = (pos + size/2) - origin
-        for i, seg in ipairs(obj.TracerSegments) do
-            local tS = (i-1)/#obj.TracerSegments
-            seg.From, seg.To = origin + (fullVec * tS), origin + (fullVec * (i/#obj.TracerSegments))
-            seg.Color = botColor:Lerp(topColor, tS); seg.Transparency = smoothPulse; seg.Visible = true
-        end
-    else
-        for _, v in pairs(obj.TracerSegments) do v.Visible = false end
-    end
-
-    -- GRADIENT FILL (Updated to Matchav2 Style)
-    if s.FillEnabled and not s.FPSMode then
-        local fillCount = #obj.FillLines
-        for i, line in ipairs(obj.FillLines) do
-            local t = (i - 1) / (fillCount - 1)
-            -- Vertical stacking lines for gradient effect
-            line.From = pos + Vector2.new(s.FillInset, size.Y * t)
-            line.To = pos + Vector2.new(size.X - s.FillInset, size.Y * t)
-            line.Color = topColor:Lerp(botColor, t)
-            line.Transparency = smoothPulse * 0.5 -- Pulses with the box
-            line.Thickness = (size.Y / fillCount) + 1 -- Overlaps slightly to prevent gaps
-            line.Visible = true
-        end
-    else
-        for _, v in pairs(obj.FillLines) do v.Visible = false end
-    end
-
-    -- GRADIENT BOX BORDERS
-    for i = 1, q do
-        local t = (i - 1) / q
-        local nextT = i / q
-        local currentLerpColor = topColor:Lerp(botColor, t)
+    local rootPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+    
+    if onScreen then
+        -- Calculations from Matchav2 [cite: 270, 271, 273, 274]
+        local headTopPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1, 0))
+        local feetPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
         
-        local l = obj.BoxLeft[i]
-        l.From = pos + Vector2.new(0, r + (size.Y - r * 2) * t)
-        l.To = pos + Vector2.new(0, r + (size.Y - r * 2) * nextT)
-        l.Color = currentLerpColor
-        l.Thickness = s.BoxThickness; l.Transparency = borderPulse; l.Visible = true
+        local height = math.abs(headTopPos.Y - feetPos.Y)
+        local width = height * 0.60 -- The 0.60 ratio from source 
+        local topLeft = Vector2.new(rootPos.X - width/2, (headTopPos.Y + feetPos.Y)/2 - height/2)
 
-        local ri = obj.BoxRight[i]
-        ri.From = pos + Vector2.new(size.X, r + (size.Y - r * 2) * t)
-        ri.To = pos + Vector2.new(size.X, r + (size.Y - r * 2) * nextT)
-        ri.Color = currentLerpColor
-        ri.Thickness = s.BoxThickness; ri.Transparency = borderPulse; ri.Visible = true
+        -- 1. BOX FILL & GRADIENT [cite: 281, 282]
+        obj.FillFrame.Position = UDim2.fromOffset(topLeft.X, topLeft.Y)
+        obj.FillFrame.Size = UDim2.fromOffset(width, height)
+        obj.FillFrame.BackgroundTransparency = s.BoxFillTransparency
+        obj.FillFrame.Visible = s.BoxGradientEnabled
+        
+        obj.Stroke.Enabled = s.BoxOutlineEnabled
+        obj.Stroke.Color = s.BoxOutlineColor
 
-        local t_edge = obj.BoxTop[i]
-        t_edge.From = pos + Vector2.new(r + (size.X - r * 2) * t, 0)
-        t_edge.To = pos + Vector2.new(r + (size.X - r * 2) * nextT, 0)
-        t_edge.Color = topColor; t_edge.Thickness = s.BoxThickness; t_edge.Transparency = borderPulse; t_edge.Visible = true
+        -- 2. NAME [cite: 295, 296]
+        if s.ShowName then
+            obj.Name.Position = Vector2.new(rootPos.X, headTopPos.Y - 20)
+            obj.Name.Text = player.Name
+            obj.Name.Visible = true
+        else
+            obj.Name.Visible = false
+        end
 
-        local b_edge = obj.BoxBottom[i]
-        b_edge.From = pos + Vector2.new(r + (size.X - r * 2) * t, size.Y)
-        b_edge.To = pos + Vector2.new(r + (size.X - r * 2) * nextT, size.Y)
-        b_edge.Color = botColor; b_edge.Thickness = s.BoxThickness; b_edge.Transparency = borderPulse; b_edge.Visible = true
-    end
+        -- 3. HEALTH BAR [cite: 304, 305, 306]
+        if s.ShowHealth then
+            local health_per = hum.Health / hum.MaxHealth
+            local barHeight = height * health_per
+            local barX = topLeft.X - 5
+            
+            obj.HealthBack.Visible = true
+            obj.HealthBack.From = Vector2.new(barX, topLeft.Y)
+            obj.HealthBack.To = Vector2.new(barX, topLeft.Y + height)
+            obj.HealthBack.Color = Color3.new(0,0,0)
+            obj.HealthBack.Thickness = 3
 
-    -- CORNER ROUNDING
-    if s.Rounded then
-        for i = 1, 12 do
-            local a1, a2 = (i-1)*(math.pi*0.5)/12, i*(math.pi*0.5)/12
-            obj.TL[i].From = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a1 + math.pi), math.sin(a1 + math.pi)) * r
-            obj.TL[i].To = (pos + Vector2.new(r, r)) + Vector2.new(math.cos(a2 + math.pi), math.sin(a2 + math.pi)) * r
-            obj.TL[i].Color = topColor
+            obj.HealthBar.Visible = true
+            obj.HealthBar.From = Vector2.new(barX, topLeft.Y + height)
+            obj.HealthBar.To = Vector2.new(barX, (topLeft.Y + height) - barHeight)
             
-            obj.TR[i].From = (pos + Vector2.new(size.X - r, r)) + Vector2.new(math.cos(a1 - math.pi/2), math.sin(a1 - math.pi/2)) * r
-            obj.TR[i].To = (pos + Vector2.new(size.X - r, r)) + Vector2.new(math.cos(a2 - math.pi/2), math.sin(a2 - math.pi/2)) * r
-            obj.TR[i].Color = topColor
-            
-            obj.BL[i].From = (pos + Vector2.new(r, size.Y - r)) + Vector2.new(math.cos(a1 + math.pi/2), math.sin(a1 + math.pi/2)) * r
-            obj.BL[i].To = (pos + Vector2.new(r, size.Y - r)) + Vector2.new(math.cos(a2 + math.pi/2), math.sin(a2 + math.pi/2)) * r
-            obj.BL[i].Color = botColor
-            
-            obj.BR[i].From = (pos + Vector2.new(size.X - r, size.Y - r)) + Vector2.new(math.cos(a1), math.sin(a1)) * r
-            obj.BR[i].To = (pos + Vector2.new(size.X - r, size.Y - r)) + Vector2.new(math.cos(a2), math.sin(a2)) * r
-            obj.BR[i].Color = botColor
-            
-            local corners = {obj.TL[i], obj.TR[i], obj.BL[i], obj.BR[i]}
-            for _, c in ipairs(corners) do c.Visible = true; c.Thickness = s.BoxThickness; c.Transparency = borderPulse end
+            -- Color Logic [cite: 306]
+            local hp = health_per * 100
+            obj.HealthBar.Color = hp >= 75 and s.HealthBarColor1 or hp >= 50 and s.HealthBarColor2 or s.HealthBarColor3
+            obj.HealthBar.Thickness = 1
+        else
+            obj.HealthBack.Visible = false
+            obj.HealthBar.Visible = false
         end
     else
-        local corners = {"TL", "TR", "BL", "BR"}
-        for _, p in ipairs(corners) do for _, d in ipairs(obj[p]) do d.Visible = false end end
+        obj.FillFrame.Visible = false
+        obj.Name.Visible = false
+        obj.HealthBar.Visible = false
+        obj.HealthBack.Visible = false
     end
 end
 
--- 6. RUNTIME HANDLERS
-Players.PlayerAdded:Connect(CreateESP)
-Players.PlayerRemoving:Connect(RemoveESP)
-
-for _, p in ipairs(Players:GetPlayers()) do
-    CreateESP(p)
-end
-
-local Connection = RunService.RenderStepped:Connect(function()
-    local s = _G.ESPLibrary.Settings
-    if not s.Enabled then
-        for _, obj in pairs(ESPTable) do SetVisible(obj, false) end
+-- 5. RUNTIME
+RunService.RenderStepped:Connect(function()
+    if not _G.ESPLibrary.Settings.Enabled then
+        for _, obj in pairs(ESPTable) do obj.FillFrame.Visible = false end
         return
     end
 
     for player, obj in pairs(ESPTable) do
-        local char = player.Character
-        if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
-            local hrp, hum = char.HumanoidRootPart, char.Humanoid
-            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-            if onScreen then
-                local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
-                if dist < s.MaxDistance then
-                    local scale = 1 / (pos.Z * math.tan(math.rad(Camera.FieldOfView * 0.5)) * 2) * 1000
-                    local w, h = 3.5 * scale, 5.5 * scale
-                    UpdateESP(obj, Vector2.new(pos.X - w/2, pos.Y - h/2), Vector2.new(w, h), player.TeamColor.Color, hum.Health/hum.MaxHealth, char, player.Name)
-                else SetVisible(obj, false) end
-            else SetVisible(obj, false) end
-        else SetVisible(obj, false) end
+        if player.Character then
+            UpdateESP(obj, player, player.Character)
+        end
     end
 end)
 
-_G.ESP_Cleanup = function()
-    Connection:Disconnect()
-    for player, _ in pairs(ESPTable) do
-        RemoveESP(player)
-    end
-    table.clear(ESPTable)
-end
+Players.PlayerAdded:Connect(CreateESP)
+Players.PlayerRemoving:Connect(RemoveESP)
+for _, p in ipairs(Players:GetPlayers()) do CreateESP(p) end
 
-return _G.ESPLibrary
+_G.ESP_Cleanup = function()
+    ScreenGui:Destroy()
+    for _, obj in pairs(ESPTable) do RemoveESP(obj.Player) end
+end

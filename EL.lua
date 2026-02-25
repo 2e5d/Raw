@@ -14,46 +14,31 @@ _G.ESPLibrary = {
     Settings = {
         Enabled = true,
         MaxDistance = 5000,
-        
-        -- Per‑element distance limits
         MaxNameDistance = 300,
         MaxTracerDistance = 300,
         MaxHealthDistance = 300,
         MaxGlowDistance = 5000,
         MaxWeaponDistance = 300,
-        
-        -- New: max distance for rings on other players
         MaxRingDistance = 300,
-        
-        -- Box Settings
         ShowBox = true,
         BoxThickness = 1.8,
         FixedCornerRadius = 2,
         FillEnabled = true,
         BoxFillTransparency = 0.4,
-        
-        -- Glow Settings
         ShowGlow = true,
         GlowThickness = 20,
         GlowTransparency = 0.8,
-        
-        -- Lighting Glow (Highlight)
         GlowEnabled = true,
         GlowOutlineTransparency = 0,
         GlowFillTransparency = 0.5,
-        
-        -- Skeleton Settings
         ShowSkeleton = true,
         SkeletonThickness = 1.2,
         SkeletonTransparency = 0.8,
-        
         ShowName = true,
         NameSize = 16,
         ShowTracer = true,
         TracerThickness = 1,
         ShowHealth = true,
-        
-        -- Weapon Settings (scaled with box)
         ShowWeapon = true,
         WeaponIconMin = 15,
         WeaponIconMax = 40,
@@ -62,18 +47,14 @@ _G.ESPLibrary = {
         WeaponTextMax = 30,
         WeaponTextScale = 0.15,
         WeaponTextWidth = 150,
-        
         BottomColor = Color3.fromRGB(0, 0, 0),
         HealthHigh = Color3.fromRGB(0, 255, 180),
         HealthLow = Color3.fromRGB(255, 30, 30),
-        
         PulseEnabled = true,
         PulseSpeed = 2.5,
-
-        -- New wings settings
         Wings = {
             Enabled = true,
-            Mode = "Normal", -- "Air" or "Normal"
+            Mode = "Normal",
         },
     }
 }
@@ -87,9 +68,8 @@ ScreenGui.Name = "GranitVisuals_PlayerSized"
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = CoreGui
 
--- Weapon icon mapping (lowercase keyword → asset ID)
 local weaponIcons = {
-    fallback = "8099127059",               -- question mark
+    fallback = "8099127059",
     ["m9"] = "16029073381",
     ["shotgun"] = "16057229826",
     ["sniper"] = "15571370793",
@@ -127,7 +107,6 @@ local function CreateESP(player)
         Highlight = Instance.new("Highlight")
     }
 
-    -- Main box
     obj.BoxFill = Instance.new("Frame")
     obj.BoxFill.BorderSizePixel = 0
     obj.BoxFill.ZIndex = 1
@@ -145,7 +124,6 @@ local function CreateESP(player)
     obj.BoxOutlineGrad.Rotation = 90
     obj.BoxOutlineGrad.Parent = obj.BoxOutline
 
-    -- Glow image
     obj.GlowImage = Instance.new("ImageLabel")
     obj.GlowImage.BackgroundTransparency = 1
     obj.GlowImage.BorderSizePixel = 0
@@ -157,7 +135,6 @@ local function CreateESP(player)
 
     obj.Tracer, obj.TracerGrad = CreateGranitElement("Frame", ScreenGui)
     
-    -- Name label
     obj.NameLabel = Instance.new("TextLabel")
     obj.NameLabel.BackgroundTransparency = 1
     obj.NameLabel.BorderSizePixel = 0
@@ -166,7 +143,6 @@ local function CreateESP(player)
     obj.NameLabel.TextSize = _G.ESPLibrary.Settings.NameSize
     obj.NameLabel.Parent = ScreenGui
 
-    -- Health bar with border
     obj.HealthBar, obj.HealthGrad = CreateGranitElement("Frame", ScreenGui)
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1
@@ -176,7 +152,6 @@ local function CreateESP(player)
     stroke.Parent = obj.HealthBar
     obj.HealthBarStroke = stroke
 
-    -- Weapon icon
     obj.WeaponIcon = Instance.new("ImageLabel")
     obj.WeaponIcon.BackgroundTransparency = 1
     obj.WeaponIcon.BorderSizePixel = 0
@@ -184,7 +159,6 @@ local function CreateESP(player)
     obj.WeaponIcon.ImageColor3 = Color3.new(1, 1, 1)
     obj.WeaponIcon.Parent = ScreenGui
 
-    -- Weapon name text
     obj.WeaponText = Instance.new("TextLabel")
     obj.WeaponText.BackgroundTransparency = 1
     obj.WeaponText.BorderSizePixel = 0
@@ -196,7 +170,6 @@ local function CreateESP(player)
     obj.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     obj.Highlight.Enabled = false
 
-    -- Bone frames
     for i = 1, 10 do
         local b = Instance.new("Frame")
         b.BorderSizePixel = 0
@@ -259,7 +232,6 @@ local function UpdateESP()
                 local wave = s.PulseEnabled and ((math.sin(tick() * s.PulseSpeed) + 1) / 2) or 1
                 local safeRadius = math.min(s.FixedCornerRadius, w/2)
 
-                -- Main box
                 obj.BoxFill.Visible = s.ShowBox
                 obj.BoxFill.Position = UDim2.new(0, x, 0, y)
                 obj.BoxFill.Size = UDim2.new(0, w, 0, h)
@@ -269,7 +241,6 @@ local function UpdateESP()
                 obj.BoxFillGrad.Color = ColorSequence.new(topCol, botCol)
                 obj.BoxOutlineGrad.Color = ColorSequence.new(topCol, botCol)
 
-                -- Glow
                 if s.ShowGlow and dist < s.MaxGlowDistance then
                     local pulseFactor = 0.8 + wave * 0.2
                     local finalTrans = s.GlowTransparency * pulseFactor
@@ -283,7 +254,6 @@ local function UpdateESP()
                     obj.GlowImage.Visible = false
                 end
 
-                -- Highlight
                 if s.GlowEnabled then
                     obj.Highlight.Enabled = true
                     obj.Highlight.Parent = char
@@ -295,7 +265,6 @@ local function UpdateESP()
                     obj.Highlight.Enabled = false
                 end
 
-                -- Name
                 if s.ShowName and dist < s.MaxNameDistance and h >= 10 then
                     local nameHeight = math.max(14, h * 0.12)
                     obj.NameLabel.Visible = true
@@ -308,7 +277,6 @@ local function UpdateESP()
                     obj.NameLabel.Visible = false
                 end
 
-                -- Health bar
                 if s.ShowHealth and dist < s.MaxHealthDistance then
                     local hp = hum.Health / hum.MaxHealth
                     obj.HealthBar.Visible = true
@@ -319,7 +287,6 @@ local function UpdateESP()
                     obj.HealthBar.Visible = false
                 end
 
-                -- Weapon icon + name (scaled with box)
                 if s.ShowWeapon and dist < s.MaxWeaponDistance and h >= 10 then
                     local tool = nil
                     for _, child in ipairs(char:GetChildren()) do
@@ -340,18 +307,15 @@ local function UpdateESP()
                             end
                         end
                         
-                        -- Icon size scales with box height
                         local iconSize = math.max(s.WeaponIconMin, math.min(s.WeaponIconMax, h * s.WeaponIconScale))
                         local textHeight = math.max(s.WeaponTextMin, math.min(s.WeaponTextMax, h * s.WeaponTextScale))
                         local textWidth = s.WeaponTextWidth
                         
-                        -- Icon positioned at bottom-left of box
                         obj.WeaponIcon.Visible = true
                         obj.WeaponIcon.Size = UDim2.new(0, iconSize, 0, iconSize)
                         obj.WeaponIcon.Position = UDim2.new(0, x, 0, y + h + 2)
                         obj.WeaponIcon.Image = iconBaseUrl .. iconId
                         
-                        -- Text to the right of icon, vertically centered
                         local textYOffset = (iconSize - textHeight) / 2
                         obj.WeaponText.Visible = true
                         obj.WeaponText.Size = UDim2.new(0, textWidth, 0, textHeight)
@@ -368,14 +332,12 @@ local function UpdateESP()
                     obj.WeaponText.Visible = false
                 end
 
-                -- Tracer
                 if s.ShowTracer and dist < s.MaxTracerDistance then
                     DrawSolidLine(obj.Tracer, Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y), Vector2.new(hrpPos.X, hrpPos.Y + h/2), s.TracerThickness, ColorSequence.new(topCol, botCol), 0.6)
                 else
                     obj.Tracer.Visible = false
                 end
 
-                -- Skeleton
                 local isR15 = char:FindFirstChild("UpperTorso") ~= nil
                 local joints = isR15 and {
                     {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"}, {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}
@@ -436,7 +398,6 @@ local function UpdateESP()
     end
 end
 
--- ==================== RINGS FOR OTHER PLAYERS ====================
 local RingTable = {}
 
 local function CreateRingForPlayer(player)
@@ -468,7 +429,6 @@ local function CreateRingForPlayer(player)
         return
     end
 
-    -- Fallback ring model (spheres)
     local model = Instance.new("Model")
     model.Name = "Ring_" .. player.Name
     model.Parent = Workspace
@@ -510,10 +470,8 @@ local function UpdateRings()
         local char = player.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if hrp then
-            -- Check distance
             local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
             if dist <= s.MaxRingDistance then
-                -- Show and update position
                 local amplitude = 3
                 local speed = 2
                 local offset = math.sin(tick() * speed) * amplitude
@@ -534,14 +492,11 @@ local function UpdateRings()
                     end
                 end
 
-                -- Ensure parented
                 ring.Parent = Workspace
             else
-                -- Hide if out of range
                 ring.Parent = nil
             end
         else
-            -- No character, hide
             ring.Parent = nil
         end
     end
@@ -558,20 +513,17 @@ for _, player in pairs(Players:GetPlayers()) do
     CreateRingForPlayer(player)
 end
 
--- ==================== LOCAL PLAYER VISUALS: DETAILED WINGS + HEAD RING ====================
 local LocalVisuals = {
     LeftWing = nil,
     RightWing = nil,
     HeadRing = nil,
 }
 
--- Helper to create a wing model (left or right)
 local function CreateWingModel(isLeft)
     local model = Instance.new("Model")
     model.Name = isLeft and "LeftWing" or "RightWing"
     model.Parent = Workspace
 
-    -- Root part (invisible) for positioning
     local root = Instance.new("Part")
     root.Size = Vector3.new(0.1, 0.1, 0.1)
     root.Transparency = 1
@@ -580,19 +532,16 @@ local function CreateWingModel(isLeft)
     root.Parent = model
     model.PrimaryPart = root
 
-    -- Wing spine (cylinder)
     local spine = Instance.new("Part")
-    spine.Size = Vector3.new(1, 0.8, 4)  -- length along Z
+    spine.Size = Vector3.new(1, 0.8, 4)
     spine.Shape = Enum.PartType.Cylinder
     spine.Anchored = true
     spine.CanCollide = false
     spine.Material = Enum.Material.Neon
     spine.BrickColor = LocalPlayer.TeamColor
     spine.Parent = model
-    -- Position spine relative to root: extend backward (negative Z) from root
     spine.CFrame = root.CFrame * CFrame.new(0, 0, -2) * CFrame.Angles(math.rad(90), 0, 0)
 
-    -- Feathers (wedges) along the spine
     local numFeathers = 5
     for i = 1, numFeathers do
         local feather = Instance.new("Part")
@@ -625,7 +574,6 @@ local function CreateWings()
     LocalVisuals.RightWing = CreateWingModel(false)
 end
 
--- Create a small ring around the head
 local function CreateHeadRing()
     if LocalVisuals.HeadRing then
         LocalVisuals.HeadRing:Destroy()
@@ -654,7 +602,6 @@ local function CreateHeadRing()
         return
     end
 
-    -- Fallback: small ring of spheres
     local model = Instance.new("Model")
     model.Name = "HeadRing"
     model.Parent = Workspace
@@ -690,7 +637,6 @@ local function CreateHeadRing()
     LocalVisuals.HeadRing = model
 end
 
--- Update local visuals each frame (wings follow player rotation with selectable offsets)
 local function UpdateLocalVisuals()
     local s = _G.ESPLibrary.Settings
     if not s.Wings.Enabled then
@@ -720,20 +666,17 @@ local function UpdateLocalVisuals()
     if not LocalVisuals.LeftWing or not LocalVisuals.RightWing then CreateWings() end
     if not LocalVisuals.HeadRing then CreateHeadRing() end
 
-    -- Ensure they are in workspace
     LocalVisuals.LeftWing.Parent = Workspace
     LocalVisuals.RightWing.Parent = Workspace
     LocalVisuals.HeadRing.Parent = Workspace
 
     local teamColor = LocalPlayer.TeamColor
 
-    -- Choose offsets based on mode
     local leftOffset, rightOffset
     if s.Wings.Mode == "Air" then
-        -- User's provided offsets
         leftOffset = CFrame.new(1.8, 2.0, 2) * CFrame.Angles(2, math.rad(-20), math.rad(55))
         rightOffset = CFrame.new(-1.8, 2.0, 2) * CFrame.Angles(2, math.rad(20), math.rad(-55))
-    else -- "Normal" mode: new lower, closer offsets
+    else
         leftOffset = CFrame.new(0.2, -1.4, 1.5) * CFrame.Angles(math.rad(60), math.rad(-15), math.rad(25))
         rightOffset = CFrame.new(-0.3, -1.4, 1.5) * CFrame.Angles(math.rad(60), math.rad(15), math.rad(-20))
     end
@@ -756,7 +699,6 @@ local function UpdateLocalVisuals()
         end
     end
 
-    -- Head ring with oscillation
     local headOffset = 0.5
     local amplitude = 0.3
     local speed = 3
@@ -776,7 +718,6 @@ local function UpdateLocalVisuals()
     end
 end
 
--- Handle character respawn
 LocalPlayer.CharacterAdded:Connect(function()
     if LocalVisuals.LeftWing then LocalVisuals.LeftWing:Destroy() end
     if LocalVisuals.RightWing then LocalVisuals.RightWing:Destroy() end
@@ -788,13 +729,10 @@ end)
 
 RunService.RenderStepped:Connect(UpdateLocalVisuals)
 
--- ==================== END LOCAL VISUALS ====================
-
 RunService.RenderStepped:Connect(UpdateESP)
 Players.PlayerAdded:Connect(CreateESP)
 for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
 
--- Connect ring updates
 RunService.RenderStepped:Connect(UpdateRings)
 
 _G.ESP_Cleanup = function()

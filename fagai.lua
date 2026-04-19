@@ -18,18 +18,16 @@ local RunService = game:GetService("RunService")
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
--- Internal Instance Table (G2L Style)
-local G2L = {}
-
 -- Theme State
 Fluid.Theme = {
     MainColor = Color3.fromRGB(25, 25, 25),
     AccentColor = Color3.fromRGB(0, 170, 255),
     SecondaryColor = Color3.fromRGB(35, 35, 35),
-    Font = Enum.Font.GothamMedium
+    Font = Enum.Font.GothamMedium,
+    PlaceholderColor = Color3.fromRGB(150, 150, 150)
 }
 
--- Notification System (Exact port from Fluid.txt)
+-- Notification System (Exact port from Fluid.txt logic)
 function Fluid.Notify(title, desc, duration)
     local screen = PlayerGui:FindFirstChild("FluidNotify") or Instance.new("ScreenGui", PlayerGui)
     screen.Name = "FluidNotify"
@@ -84,13 +82,13 @@ function Fluid.CreateWindow(windowTitle)
     FluidUI.IgnoreGuiInset = true
     FluidUI.ResetOnSpawn = false
 
-    -- Loading Screen (From Fluid.txt loading sequence)
+    -- Loading Screen (From Fluid.txt sequence)
     local Loading = Instance.new("Frame")
     Loading.Name = "Loading"
     Loading.Parent = FluidUI
     Loading.Size = UDim2.new(1, 0, 1, 0)
     Loading.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    Loading.ZIndex = 10
+    Loading.ZIndex = 100
 
     local LoadingText = Instance.new("TextLabel", Loading)
     LoadingText.Text = "Initializing Fluid..."
@@ -109,6 +107,7 @@ function Fluid.CreateWindow(windowTitle)
     Main.BackgroundColor3 = Fluid.Theme.MainColor
     Main.BorderSizePixel = 0
     Main.Visible = false
+    Main.ClipsDescendants = true
     
     Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
 
@@ -176,7 +175,7 @@ function Fluid.CreateWindow(windowTitle)
     end
     setupDrag()
 
-    -- Start Sequence (Loading Simulation)
+    -- Start Sequence (Loading Simulation from Fluid.txt)
     task.spawn(function()
         task.wait(1)
         LoadingText.Text = "Loading Themes..."
@@ -188,12 +187,12 @@ function Fluid.CreateWindow(windowTitle)
         task.wait(0.5)
         Loading:Destroy()
         Main.Visible = true
+        local targetSize = UDim2.new(0, 550, 0, 350)
         Main.Size = UDim2.new(0, 0, 0, 0)
-        TweenService:Create(Main, TweenInfo.new(0.6, Enum.EasingStyle.Back), {Size = UDim2.new(0, 550, 0, 350)}):Play()
+        TweenService:Create(Main, TweenInfo.new(0.6, Enum.EasingStyle.Back), {Size = targetSize}):Play()
     end)
 
     local Window = {}
-    local Tabs = {}
 
     function Window.AddTab(name)
         local TabButton = Instance.new("TextButton", TabHolder)
@@ -210,6 +209,7 @@ function Fluid.CreateWindow(windowTitle)
         Page.BackgroundTransparency = 1
         Page.Visible = false
         Page.ScrollBarThickness = 2
+        Page.CanvasSize = UDim2.new(0, 0, 0, 0)
         local PageList = Instance.new("UIListLayout", Page)
         PageList.Padding = UDim.new(0, 8)
 
@@ -226,6 +226,7 @@ function Fluid.CreateWindow(windowTitle)
 
         local Tab = {}
 
+        -- Add Button Component
         function Tab.AddButton(text, callback)
             local Btn = Instance.new("TextButton", Page)
             Btn.Size = UDim2.new(1, -10, 0, 40)
@@ -241,6 +242,7 @@ function Fluid.CreateWindow(windowTitle)
             Page.CanvasSize = UDim2.new(0, 0, 0, PageList.AbsoluteContentSize.Y + 10)
         end
 
+        -- Add Toggle Component
         function Tab.AddToggle(text, default, callback)
             local state = default or false
             local Tgl = Instance.new("TextButton", Page)
@@ -254,20 +256,185 @@ function Fluid.CreateWindow(windowTitle)
             Instance.new("UICorner", Tgl).CornerRadius = UDim.new(0, 6)
 
             local Box = Instance.new("Frame", Tgl)
-            Box.Size = UDim2.new(0, 20, 0, 20)
-            Box.Position = UDim2.new(1, -30, 0.5, -10)
+            Box.Size = UDim2.new(0, 36, 0, 18)
+            Box.Position = UDim2.new(1, -45, 0.5, -9)
             Box.BackgroundColor3 = state and Fluid.Theme.AccentColor or Color3.fromRGB(50, 50, 50)
             Instance.new("UICorner", Box).CornerRadius = UDim.new(1, 0)
+
+            local Dot = Instance.new("Frame", Box)
+            Dot.Size = UDim2.new(0, 14, 0, 14)
+            Dot.Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+            Dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            Instance.new("UICorner", Dot).CornerRadius = UDim.new(1, 0)
 
             Tgl.MouseButton1Click:Connect(function()
                 state = not state
                 TweenService:Create(Box, TweenInfo.new(0.2), {BackgroundColor3 = state and Fluid.Theme.AccentColor or Color3.fromRGB(50, 50, 50)}):Play()
+                TweenService:Create(Dot, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
                 callback(state)
             end)
             Page.CanvasSize = UDim2.new(0, 0, 0, PageList.AbsoluteContentSize.Y + 10)
         end
 
-        if #TabHolder:GetChildren() == 2 then -- Auto select first tab
+        -- Add Slider Component
+        function Tab.AddSlider(text, min, max, default, callback)
+            local SliderFrame = Instance.new("Frame", Page)
+            SliderFrame.Size = UDim2.new(1, -10, 0, 50)
+            SliderFrame.BackgroundColor3 = Fluid.Theme.SecondaryColor
+            Instance.new("UICorner", SliderFrame).CornerRadius = UDim.new(0, 6)
+
+            local Label = Instance.new("TextLabel", SliderFrame)
+            Label.Text = "  " .. text
+            Label.Size = UDim2.new(1, 0, 0, 30)
+            Label.BackgroundTransparency = 1
+            Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            Label.Font = Fluid.Theme.Font
+            Label.TextSize = 14
+            Label.TextXAlignment = "Left"
+
+            local ValueLabel = Instance.new("TextLabel", SliderFrame)
+            ValueLabel.Text = tostring(default or min)
+            ValueLabel.Size = UDim2.new(0, 40, 0, 30)
+            ValueLabel.Position = UDim2.new(1, -50, 0, 0)
+            ValueLabel.BackgroundTransparency = 1
+            ValueLabel.TextColor3 = Fluid.Theme.AccentColor
+            ValueLabel.Font = Fluid.Theme.Font
+            ValueLabel.TextSize = 14
+            ValueLabel.TextXAlignment = "Right"
+
+            local SliderBar = Instance.new("Frame", SliderFrame)
+            SliderBar.Size = UDim2.new(1, -20, 0, 4)
+            SliderBar.Position = UDim2.new(0, 10, 0.8, -2)
+            SliderBar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            Instance.new("UICorner", SliderBar).CornerRadius = UDim.new(1, 0)
+
+            local Fill = Instance.new("Frame", SliderBar)
+            Fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+            Fill.BackgroundColor3 = Fluid.Theme.AccentColor
+            Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
+
+            local function update(input)
+                local pos = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+                Fill.Size = UDim2.new(pos, 0, 1, 0)
+                local val = math.floor(min + (max - min) * pos)
+                ValueLabel.Text = tostring(val)
+                callback(val)
+            end
+
+            SliderBar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    local move; move = UserInputService.InputChanged:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseMovement then update(input) end
+                    end)
+                    local endCon; endCon = UserInputService.InputEnded:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                            move:Disconnect()
+                            endCon:Disconnect()
+                        end
+                    end)
+                    update(input)
+                end
+            end)
+            Page.CanvasSize = UDim2.new(0, 0, 0, PageList.AbsoluteContentSize.Y + 10)
+        end
+
+        -- Add Dropdown Component
+        function Tab.AddDropdown(text, list, callback)
+            local DropdownFrame = Instance.new("Frame", Page)
+            DropdownFrame.Size = UDim2.new(1, -10, 0, 40)
+            DropdownFrame.BackgroundColor3 = Fluid.Theme.SecondaryColor
+            DropdownFrame.ClipsDescendants = true
+            Instance.new("UICorner", DropdownFrame).CornerRadius = UDim.new(0, 6)
+
+            local Btn = Instance.new("TextButton", DropdownFrame)
+            Btn.Size = UDim2.new(1, 0, 0, 40)
+            Btn.BackgroundTransparency = 1
+            Btn.Text = "  " .. text
+            Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            Btn.Font = Fluid.Theme.Font
+            Btn.TextSize = 14
+            Btn.TextXAlignment = "Left"
+
+            local Arrow = Instance.new("TextLabel", DropdownFrame)
+            Arrow.Text = "v"
+            Arrow.Size = UDim2.new(0, 40, 0, 40)
+            Arrow.Position = UDim2.new(1, -40, 0, 0)
+            Arrow.BackgroundTransparency = 1
+            Arrow.TextColor3 = Color3.fromRGB(200, 200, 200)
+            Arrow.Font = Enum.Font.GothamBold
+            Arrow.TextSize = 14
+
+            local ListHolder = Instance.new("Frame", DropdownFrame)
+            ListHolder.Position = UDim2.new(0, 0, 0, 40)
+            ListHolder.Size = UDim2.new(1, 0, 0, #list * 30)
+            ListHolder.BackgroundTransparency = 1
+            local LL = Instance.new("UIListLayout", ListHolder)
+
+            local open = false
+            Btn.MouseButton1Click:Connect(function()
+                open = not open
+                TweenService:Create(DropdownFrame, TweenInfo.new(0.3), {Size = open and UDim2.new(1, -10, 0, 40 + (#list * 30)) or UDim2.new(1, -10, 0, 40)}):Play()
+                Arrow.Rotation = open and 180 or 0
+                task.wait(0.3)
+                Page.CanvasSize = UDim2.new(0, 0, 0, PageList.AbsoluteContentSize.Y + 10)
+            end)
+
+            for _, val in pairs(list) do
+                local opt = Instance.new("TextButton", ListHolder)
+                opt.Size = UDim2.new(1, 0, 0, 30)
+                opt.BackgroundTransparency = 1
+                opt.Text = val
+                opt.TextColor3 = Color3.fromRGB(180, 180, 180)
+                opt.Font = Fluid.Theme.Font
+                opt.TextSize = 13
+                
+                opt.MouseButton1Click:Connect(function()
+                    Btn.Text = "  " .. text .. ": " .. val
+                    callback(val)
+                    open = false
+                    TweenService:Create(DropdownFrame, TweenInfo.new(0.3), {Size = UDim2.new(1, -10, 0, 40)}):Play()
+                    Arrow.Rotation = 0
+                end)
+            end
+            Page.CanvasSize = UDim2.new(0, 0, 0, PageList.AbsoluteContentSize.Y + 10)
+        end
+
+        -- Add Textbox Component
+        function Tab.AddTextbox(text, placeholder, callback)
+            local BoxFrame = Instance.new("Frame", Page)
+            BoxFrame.Size = UDim2.new(1, -10, 0, 45)
+            BoxFrame.BackgroundColor3 = Fluid.Theme.SecondaryColor
+            Instance.new("UICorner", BoxFrame).CornerRadius = UDim.new(0, 6)
+
+            local Label = Instance.new("TextLabel", BoxFrame)
+            Label.Text = "  " .. text
+            Label.Size = UDim2.new(0.4, 0, 1, 0)
+            Label.BackgroundTransparency = 1
+            Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            Label.Font = Fluid.Theme.Font
+            Label.TextSize = 14
+            Label.TextXAlignment = "Left"
+
+            local Input = Instance.new("TextBox", BoxFrame)
+            Input.Size = UDim2.new(0.5, 0, 0, 30)
+            Input.Position = UDim2.new(1, -10, 0.5, -15)
+            Input.AnchorPoint = Vector2.new(1, 0)
+            Input.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+            Input.Text = ""
+            Input.PlaceholderText = placeholder or "Type here..."
+            Input.TextColor3 = Color3.fromRGB(255, 255, 255)
+            Input.PlaceholderColor3 = Fluid.Theme.PlaceholderColor
+            Input.Font = Fluid.Theme.Font
+            Input.TextSize = 13
+            Instance.new("UICorner", Input).CornerRadius = UDim.new(0, 4)
+
+            Input.FocusLost:Connect(function(enter)
+                if enter then callback(Input.Text) end
+            end)
+            Page.CanvasSize = UDim2.new(0, 0, 0, PageList.AbsoluteContentSize.Y + 10)
+        end
+
+        if #TabHolder:GetChildren() == 2 then
             Page.Visible = true
             TabButton.BackgroundColor3 = Fluid.Theme.AccentColor
             TabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -275,12 +442,6 @@ function Fluid.CreateWindow(windowTitle)
 
         return Tab
     end
-
-    -- Theme Manager Page
-    local Settings = Window.AddTab("Settings")
-    Settings.AddButton("Sky Blue Accent", function() Fluid.Theme.AccentColor = Color3.fromRGB(0, 170, 255) end)
-    Settings.AddButton("Crimson Accent", function() Fluid.Theme.AccentColor = Color3.fromRGB(255, 50, 50) end)
-    Settings.AddButton("Emerald Accent", function() Fluid.Theme.AccentColor = Color3.fromRGB(50, 255, 50) end)
 
     return Window
 end

@@ -131,12 +131,12 @@ table.insert(list, lbl)
 return lbl
 end
 
--- Pool generation
-for i = 1, 5000 do
+-- Increased pool for all features
+for i = 1, 8000 do
 createL(ESP.Theme.Outline, outCont, blackLines)
 createL(ESP.Theme.Main, inCont, purpleLines)
 end
-for i = 1, 100 do
+for i = 1, 150 do
 createGlow(glowCont, glowFrames)
 createLab(inCont, nameLbls)
 createLab(inCont, toolLbls)
@@ -145,11 +145,16 @@ end
 local function drawSeg(p1, p2, obj, baseThickness, colorOverride)
 local dist = (p1 - p2).Magnitude
 local center = (p1 + p2) / 2
-obj.Size = UDim2.fromOffset(dist, baseThickness)
+-- Fix: Ensure minimum thickness of 1 so it doesn't disappear/turn black when far
+local finalThickness = math.max(1, baseThickness)
+
+obj.Size = UDim2.fromOffset(dist, finalThickness)
 obj.Position = UDim2.fromOffset(center.X, center.Y)
 obj.Rotation = math.deg(math.atan2(p2.Y - p1.Y, p2.X - p1.X))
 if colorOverride then obj.BackgroundColor3 = colorOverride end
 obj.Visible = true
+
+
 end
 
 local function getBox(char)
@@ -196,11 +201,57 @@ end
 return lineIdx
 end
 
+local function drawHat(head, lineIdx, scale)
+local hatRadius, hatHeight, segments = 1.2, 1.0, 12
+local headPos = head.Position
+local peakScreen, peakOn = camera:WorldToViewportPoint(headPos + Vector3.new(0, 1.3, 0))
+if not peakOn then return lineIdx end
+local pPeak = Vector2.new(peakScreen.X, peakScreen.Y)
+local lastRim, firstRim
+for i = 1, segments do
+local angle = (i / segments) * math.pi * 2
+local rimPos = headPos + Vector3.new(math.cos(angle) * hatRadius, 0.3, math.sin(angle) * hatRadius)
+local rs, ron = camera:WorldToViewportPoint(rimPos)
+local pRim = Vector2.new(rs.X, rs.Y)
+if ron then
+drawSeg(pPeak, pRim, blackLines[lineIdx], 3 * scale, ESP.Theme.Outline)
+drawSeg(pPeak, pRim, purpleLines[lineIdx], 1 * scale, ESP.Theme.Main)
+lineIdx = lineIdx + 1
+if lastRim then
+drawSeg(lastRim, pRim, blackLines[lineIdx], 3 * scale, ESP.Theme.Outline)
+drawSeg(lastRim, pRim, purpleLines[lineIdx], 1 * scale, ESP.Theme.Main)
+lineIdx = lineIdx + 1
+end
+if i == 1 then firstRim = pRim end
+if i == segments and firstRim then
+drawSeg(pRim, firstRim, blackLines[lineIdx], 3 * scale, ESP.Theme.Outline)
+drawSeg(pRim, firstRim, purpleLines[lineIdx], 1 * scale, ESP.Theme.Main)
+lineIdx = lineIdx + 1
+end
+end
+lastRim = pRim
+end
+return lineIdx
+end
+
+local function getWingPoints(torsoCF)
+local pts = {Vector3.new(0.5,0.5,0.5), Vector3.new(1.5,1.8,0.7), Vector3.new(3.0,2.5,1.0), Vector3.new(3.2,1.2,1.1), Vector3.new(2.0,0.2,0.9), Vector3.new(2.8,-0.5,1.0), Vector3.new(1.5,-0.8,0.8), Vector3.new(0.5,-0.2,0.5)}
+local left, right = {}, {}
+for _, p in ipairs(pts) do
+table.insert(right, torsoCF * p)
+table.insert(left, torsoCF * Vector3.new(-p.X, p.Y, p.Z))
+end
+return left, right
+end
+
 ESP.Connection = runService.RenderStepped:Connect(function()
 local lineIdx, nameIdx, glowIdx = 1, 1, 1
 if not ESP.Enabled then
 for _, l in ipairs(blackLines) do l.Visible = false end
 for _, l in ipairs(purpleLines) do l.Visible = false end
+for _, l in ipairs(nameLbls) do l.Visible = false end
+for _, l in ipairs(toolLbls) do l.Visible = false end
+for _, g in ipairs(glowFrames) do g.Main.Visible = false end
 return
 end
 
@@ -238,6 +289,28 @@ for _, plr in ipairs(players:GetPlayers()) do
                 end
             end
 
+            -- Wings Logic (Local Player Only)
+            if plr == localPlayer and ESP.Wings then
+                local lPts, rPts = getWingPoints(torso.CFrame)
+                local function drawW(pts)
+                    local sPts = {}
+                    for _, p in ipairs(pts) do
+                        local s, on = camera:WorldToViewportPoint(p)
+                        table.insert(sPts, on and Vector2.new(s.X, s.Y) or nil)
+                    end
+                    for i = 1, #sPts do
+                        local p1, p2 = sPts[i], sPts[i % #sPts + 1]
+                        if p1 and p2 and blackLines[lineIdx] then
+                            drawSeg(p1, p2, blackLines[lineIdx], 3 * scale, ESP.Theme.Outline)
+                            drawSeg(p1, p2, purpleLines[lineIdx], 1 * scale, ESP.Theme.Main)
+                            lineIdx = lineIdx + 1
+                        end
+                    end
+                end
+                drawW(lPts)
+                drawW(rPts)
+            end
+
             -- Box Logic
             if plr ~= localPlayer then
                 local cf, size = getBox(char)
@@ -245,8 +318,11 @@ for _, plr in ipairs(players:GetPlayers()) do
                     if ESP.Boxes3D then
                         lineIdx = draw3DBox(cf, size, lineIdx, scale)
                     end
+                    
+                    if ESP.Hats and char:FindFirstChild("Head") then
+                        lineIdx = drawHat(char.Head, lineIdx, scale)
+                    end
 
-                    -- Screen corners for 2D UI
                     local vertices = {Vector3.new(-1,-1,-1), Vector3.new(1,1,1)}
                     local c1, _ = camera:WorldToViewportPoint((cf * CFrame.new(size * 0.5 * vertices[1])).Position)
                     local c2, _ = camera:WorldToViewportPoint((cf * CFrame.new(size * 0.5 * vertices[2])).Position)
@@ -282,11 +358,22 @@ for _, plr in ipairs(players:GetPlayers()) do
                         lineIdx = lineIdx + 1
                     end
 
+                    local fontSize = math.max(6, math.floor(12 * scale))
                     if ESP.Names and nameLbls[nameIdx] then
                         nameLbls[nameIdx].Text = plr.Name
-                        nameLbls[nameIdx].Position = UDim2.fromOffset((minX + maxX)/2, minY - 15)
-                        nameLbls[nameIdx].Visible, nameIdx = true, nameIdx + 1
+                        nameLbls[nameIdx].TextSize = fontSize
+                        nameLbls[nameIdx].Position = UDim2.fromOffset((minX + maxX)/2, minY - (15 * scale))
+                        nameLbls[nameIdx].Visible = true
                     end
+                    
+                    if ESP.Tools and toolLbls[nameIdx] then
+                        local tool = char:FindFirstChildOfClass("Tool")
+                        toolLbls[nameIdx].Text = tool and tool.Name or "None"
+                        toolLbls[nameIdx].TextSize = fontSize
+                        toolLbls[nameIdx].Position = UDim2.fromOffset((minX + maxX)/2, maxY + (2 * scale))
+                        toolLbls[nameIdx].Visible = true
+                    end
+                    nameIdx = nameIdx + 1
                 end
             end
         end
